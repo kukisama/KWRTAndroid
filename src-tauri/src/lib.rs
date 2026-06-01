@@ -1,16 +1,15 @@
-use crate::actions::{self, DirectListResult};
-use crate::client::{ConnectOptions, LuciClient, SharedClient};
-use crate::creds;
-use crate::detect::{run_detection, DetectionReport};
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tauri::{Manager, State};
-use tokio::sync::RwLock;
-
 mod actions;
 mod client;
 mod creds;
 mod detect;
+
+use crate::actions::DirectListResult;
+use crate::client::{ConnectOptions, LuciClient, SharedClient};
+use crate::detect::{run_detection, DetectionReport};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tauri::State;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Serialize)]
 struct ApiError {
@@ -162,11 +161,13 @@ pub fn run() {
             load_saved_password,
             delete_saved_password,
         ])
-        .setup(|app| {
-            // 默认开发期开窗 devtools
+        .setup(|_app| {
             #[cfg(debug_assertions)]
-            if let Some(w) = app.get_webview_window("main") {
-                w.open_devtools();
+            {
+                use tauri::Manager;
+                if let Some(w) = _app.get_webview_window("main") {
+                    w.open_devtools();
+                }
             }
             Ok(())
         })

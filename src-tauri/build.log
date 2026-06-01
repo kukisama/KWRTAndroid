@@ -1,74 +1,21 @@
-    Updating crates.io index
-     Locking 494 packages to latest compatible versions
-      Adding generic-array v0.14.7 (available: v0.14.9)
-      Adding keyring v3.6.3 (available: v4.0.1)
-      Adding reqwest v0.12.28 (available: v0.13.4)
-      Adding toml v0.8.2 (available: v0.8.23)
-      Adding toml_datetime v0.6.3 (available: v0.6.11)
-      Adding toml_edit v0.20.2 (available: v0.20.7)
- Downloading crates ...
-  Downloaded socket2 v0.6.4
-  Downloaded shlex v2.0.1
-  Downloaded uuid v1.23.2
-  Downloaded typenum v1.20.1
-  Downloaded zerocopy v0.8.50
-  Downloaded jiff v0.2.28
-  Downloaded mio v1.2.1
-  Downloaded cc v1.2.63
-  Downloaded hyper v1.10.1
-   Compiling proc-macro2 v1.0.106
-   Compiling quote v1.0.45
-   Compiling unicode-ident v1.0.24
-   Compiling serde_core v1.0.228
-   Compiling syn v2.0.117
-   Compiling icu_normalizer_data v2.2.0
-   Compiling windows-link v0.2.1
-   Compiling icu_properties_data v2.2.0
-   Compiling synstructure v0.13.2
-   Compiling zerofrom-derive v0.1.7
-   Compiling yoke-derive v0.8.2
-   Compiling zerovec-derive v0.11.3
-   Compiling displaydoc v0.2.6
-   Compiling serde_derive v1.0.228
-   Compiling siphasher v1.0.3
-   Compiling parking_lot_core v0.9.12
-   Compiling phf_shared v0.13.1
-   Compiling cfg-if v1.0.4
-   Compiling fastrand v2.4.1
-   Compiling phf_generator v0.13.1
-   Compiling zmij v1.0.21
-   Compiling stable_deref_trait v1.2.1
-   Compiling windows-sys v0.61.2
-   Compiling zerofrom v0.1.8
-   Compiling smallvec v1.15.1
-   Compiling yoke v0.8.2
-   Compiling thiserror v2.0.18
-   Compiling shlex v2.0.1
-   Compiling itoa v1.0.18
-   Compiling find-msvc-tools v0.1.9
-   Compiling cc v1.2.63
-   Compiling zerovec v0.11.6
-   Compiling thiserror-impl v2.0.18
-   Compiling serde v1.0.228
-   Compiling time-core v0.1.8
-   Compiling num-conv v0.2.2
-   Compiling phf_macros v0.13.1
-   Compiling memchr v2.8.1
-   Compiling typeid v1.0.3
-   Compiling libc v0.2.186
-   Compiling tinystr v0.8.3
-   Compiling phf_codegen v0.13.1
-   Compiling ident_case v1.0.1
-   Compiling thiserror v1.0.69
-   Compiling writeable v0.6.3
-   Compiling windows_x86_64_msvc v0.52.6
-   Compiling litemap v0.8.2
-   Compiling version_check v0.9.5
-   Compiling erased-serde v0.4.10
-   Compiling strsim v0.11.1
-   Compiling icu_locale_core v2.2.0
-   Compiling darling_core v0.23.0
-   Compiling potential_utf v0.1.5
-   Compiling zerotrie v0.2.4
-   Compiling utf8_iter v1.0.4
-   Compiling darling_macro v0.23.0
+   Compiling kwrt-controller v0.1.0 (C:\Users\kukisama\Downloads\Scripts\KWRTAndroid\src-tauri)
+warning: field `username` is never read
+  --> src\client.rs:20:9
+   |
+15 | pub struct LuciClient {
+   |            ---------- field in this struct
+...
+20 |     pub username: String,
+   |         ^^^^^^^^
+   |
+   = note: `LuciClient` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: struct `SavedCredential` is never constructed
+  --> src\creds.rs:10:12
+   |
+10 | pub struct SavedCredential {
+   |            ^^^^^^^^^^^^^^^
+
+warning: `kwrt-controller` (lib) generated 2 warnings
+    Finished `release` profile [optimized] target(s) in 2m 48s

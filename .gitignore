@@ -1,0 +1,3 @@
+release/
+*.log
+src-tauri/build.log
