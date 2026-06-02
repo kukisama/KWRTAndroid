@@ -1,70 +1,103 @@
-// 与 Rust 后端通过 Tauri invoke 通信。无打包器，直接用 window.__TAURI__ 全局。
-const { invoke } = window.__TAURI__.core;
+// 入口：登录 + 主视图 tab 调度
+import "./tooltip.js";
+import { $, el, clear, toast } from "./dom.js";
+import { api, formatError } from "./api.js";
+import { register, renderTabBar, refreshCurrent } from "./tabs.js";
+import { bindThemeButton } from "./theme.js";
 
-const $ = (sel) => document.querySelector(sel);
+import mountDashboard from "./views/dashboard.js";
+import mountNodes from "./views/nodes.js";
+import mountShunt from "./views/shunt.js";
+import mountSubscribe from "./views/subscribe.js";
+import mountDns from "./views/dns.js";
+import mountRules from "./views/rules.js";
+import mountForwarding from "./views/forwarding.js";
+import mountDirect from "./views/direct.js";
+import mountLog from "./views/log.js";
+import mountBackup from "./views/backup.js";
+import mountRaw from "./views/raw.js";
+
 const PREF_KEY = "kwrt.prefs.v1";
 
-const state = {
-  connected: false,
+// 共享 ctx：所有 view 都通过它访问 overview / 配置名 / 刷新
+const ctx = {
+  config: "passwall",
   report: null,
-  prefs: loadPrefs(),
+  overview: null,
+  async refresh() {
+    if (!ctx.config) return;
+    ctx.overview = await api.overview(ctx.config);
+    return ctx.overview;
+  },
+  async refreshAndRedraw() {
+    await ctx.refresh();
+    refreshCurrent($("#tabbar"), $("#tabview"), ctx);
+  },
 };
 
-// ---------------- 偏好（非敏感） ----------------
-function loadPrefs() {
-  try {
-    return JSON.parse(localStorage.getItem(PREF_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-function savePrefs(p) {
-  state.prefs = { ...state.prefs, ...p };
-  localStorage.setItem(PREF_KEY, JSON.stringify(state.prefs));
-}
+// 注册所有 tab。文案 + 提示都是中文。
+register("dashboard", "总览", mountDashboard, "主开关、当前 TCP/UDP 节点、运行状态一览");
+register("nodes", "节点", mountNodes, "查看 / 设为出口 / 删除 / 导入链接（vless/vmess/hy2/trojan/ss）");
+register("shunt", "分流", mountShunt, "按域名 / IP 段把流量分到不同节点，对应 PassWall 的"分流"页");
+register("subscribe", "订阅", mountSubscribe, "管理订阅链接并立即更新节点池");
+register("dns", "DNS", mountDns, "DNS 模式 / 远程 DNS / 是否过滤 IPv6 等");
+register("rules", "规则源", mountRules, "GFWList / ChnRoute / 中国域名表等规则的更新与源");
+register("forwarding", "端口/转发", mountForwarding, "TCP/UDP 重定向端口、丢弃端口、转发方式");
+register("direct", "直连列表", mountDirect, "PassWall 直连出局的 IP / 域名清单（即原"加入直连"功能）");
+register("log", "日志", mountLog, "实时查看 PassWall 运行日志");
+register("backup", "备份/恢复", mountBackup, "导出 / 导入 /etc/config/passwall 整个配置文件");
+register("raw", "原始配置", mountRaw, "展开后能看到 22 个 section 全部原始字段，遇到 UI 没覆盖的设置就来这里");
 
-// ---------------- 启动：回填上次表单 ----------------
+// ───── 启动流程 ─────
 window.addEventListener("DOMContentLoaded", async () => {
+  bindThemeButton();
+  // 全局错误捕获 -> toast + console，便于在 UI 上看到 JS 异常
+  window.addEventListener("error", (e) => {
+    console.error("window.error", e.error || e.message, e);
+    toast("脚本错误：" + (e.error?.message || e.message || "未知"), "warn");
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    console.error("unhandledrejection", e.reason);
+    toast("未处理异常：" + formatError(e.reason), "warn");
+  });
+
   const f = $("#form-login");
-  const p = state.prefs;
+  const p = loadPrefs();
   if (p.host) f.host.value = p.host;
   if (p.scheme) f.scheme.value = p.scheme;
   if (p.port) f.port.value = p.port;
   if (p.username) f.username.value = p.username;
   if (p.accept_invalid_certs) f.accept_invalid_certs.checked = true;
   if (p.remember) f.remember.checked = true;
-
-  // 尝试从 keyring 加载密码
   if (p.remember && p.host && p.username) {
     try {
-      const pwd = await invoke("load_saved_password", { q: { host: p.host, username: p.username } });
+      const pwd = await api.loadPassword(p.host, p.username);
       if (pwd) f.password.value = pwd;
-    } catch (e) {
-      console.warn("load_saved_password failed", e);
-    }
+    } catch (e) { console.warn("load_saved_password failed", e); }
   }
 
-  bindHandlers();
-});
-
-function bindHandlers() {
-  $("#form-login").addEventListener("submit", onLogin);
+  f.addEventListener("submit", onLogin);
   $("#btn-forget").addEventListener("click", onForget);
   $("#btn-disconnect").addEventListener("click", onDisconnect);
   $("#btn-redetect").addEventListener("click", onRedetect);
-  $("#form-add").addEventListener("submit", onAddEntry);
-  $("#btn-reload").addEventListener("click", () => onServiceAction("reload"));
-  $("#btn-restart").addEventListener("click", () => onServiceAction("restart"));
-  $("#btn-refresh-list").addEventListener("click", refreshList);
+  $("#btn-refresh-all").addEventListener("click", onRefreshAll);
+  $("#btn-reload").addEventListener("click", () => onService("reload"));
+  $("#btn-restart").addEventListener("click", () => onService("restart"));
+});
+
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(PREF_KEY) || "{}"); } catch { return {}; }
+}
+function savePrefs(patch) {
+  const cur = loadPrefs();
+  localStorage.setItem(PREF_KEY, JSON.stringify({ ...cur, ...patch }));
 }
 
-// ---------------- 登录 ----------------
 async function onLogin(ev) {
   ev.preventDefault();
   const f = ev.currentTarget;
   const errEl = $("#login-error");
-  errEl.hidden = true;
-  errEl.textContent = "";
+  errEl.hidden = true; errEl.textContent = "";
   const btn = $("#btn-login");
   btn.disabled = true; btn.textContent = "登录中…";
 
@@ -80,21 +113,17 @@ async function onLogin(ev) {
   const remember = f.remember.checked;
 
   try {
-    const report = await invoke("connect", { opts, remember });
+    const report = await api.connect(opts, remember);
     savePrefs({
       host: opts.host, scheme: opts.scheme, port: opts.port || null,
-      username: opts.username, accept_invalid_certs: opts.accept_invalid_certs,
-      remember,
+      username: opts.username, accept_invalid_certs: opts.accept_invalid_certs, remember,
     });
     if (!remember) {
-      // 用户取消"记住密码"时，删掉之前保存的
-      try {
-        await invoke("delete_saved_password", { q: { host: opts.host, username: opts.username } });
-      } catch {}
+      try { await api.deletePassword(opts.host, opts.username); } catch {}
     }
-    state.connected = true;
-    state.report = report;
-    enterMainView(report);
+    ctx.report = report;
+    ctx.config = report.primary_config || "passwall";
+    await enterMain();
   } catch (e) {
     errEl.textContent = formatError(e);
     errEl.hidden = false;
@@ -105,158 +134,76 @@ async function onLogin(ev) {
 
 async function onForget() {
   const f = $("#form-login");
-  const host = f.host.value.trim();
-  const user = f.username.value.trim();
+  const host = f.host.value.trim(); const user = f.username.value.trim();
   if (!host || !user) return;
   if (!confirm(`确认删除 ${user}@${host} 的保存密码？`)) return;
-  try {
-    await invoke("delete_saved_password", { q: { host, username: user } });
-    f.password.value = "";
-    alert("已删除");
-  } catch (e) {
-    alert("删除失败：" + formatError(e));
-  }
+  try { await api.deletePassword(host, user); f.password.value = ""; toast("已删除保存密码"); }
+  catch (e) { toast(formatError(e), "warn"); }
 }
 
 async function onDisconnect() {
-  try { await invoke("disconnect"); } catch {}
-  state.connected = false;
-  state.report = null;
+  try { await api.disconnect(); } catch {}
+  ctx.report = null; ctx.overview = null;
   $("#view-main").hidden = true;
   $("#view-login").hidden = false;
   $("#btn-disconnect").hidden = true;
-  setStatus("未连接");
+  $("#status-line").textContent = "未连接";
 }
 
-// ---------------- 主界面 ----------------
-function enterMainView(report) {
+async function enterMain() {
   $("#view-login").hidden = true;
   $("#view-main").hidden = false;
   $("#btn-disconnect").hidden = false;
-  renderReport(report);
+  setStatus();
+  renderBanner();
+  try { await ctx.refresh(); } catch (e) { toast(`拉取概览失败：${formatError(e)}`, "warn"); }
+  renderTabBar($("#tabbar"), $("#tabview"), ctx);
 }
 
-function renderReport(report) {
-  setStatus(`${state.prefs.username}@${state.prefs.host} · ${report.hostname || "?"} · ${report.openwrt_release || "?"}`);
+function setStatus() {
+  const p = loadPrefs();
+  const r = ctx.report;
+  $("#status-line").textContent = `${p.username}@${p.host} · ${r?.hostname || "?"} · ${r?.openwrt_release || "?"}`;
+}
 
+function renderBanner() {
+  const r = ctx.report;
   const banner = $("#banner");
   let label = "未识别到 PassWall";
   let bad = true;
-  if (report.variant === "v1") { label = "已识别：PassWall v1"; bad = false; }
-  else if (report.variant === "v2") { label = "已识别：PassWall v2"; bad = false; }
-  else if (report.variant === "both") { label = "同时安装了 PassWall v1 和 v2，默认操作 v1"; bad = false; }
+  if (r?.variant === "v1") { label = "已识别：PassWall v1"; bad = false; }
+  else if (r?.variant === "v2") { label = "已识别：PassWall v2"; bad = false; }
+  else if (r?.variant === "both") { label = "v1 + v2 同时安装，默认操作 v1"; bad = false; }
   banner.className = "banner" + (bad ? " bad" : "");
-  banner.textContent = `${label}  ·  主配置: ${report.primary_config || "-"}  ·  init: ${report.init_script || "-"}  ·  direct_ip: ${report.direct_ip_path || "-"}`;
-
-  // checks
-  const list = $("#checks");
-  list.replaceChildren(...report.checks.map((c) => {
-    const li = document.createElement("li");
-    li.className = c.ok ? "ok" : "ng";
-    const m = document.createElement("span"); m.className = "mark"; m.textContent = c.ok ? "✓" : "✗";
-    const n = document.createElement("span"); n.className = "name"; n.textContent = c.name;
-    const d = document.createElement("span"); d.className = "detail"; d.textContent = c.detail;
-    li.append(m, n, d);
-    return li;
-  }));
-
-  $("#configs").textContent = report.uci_configs.join("  ");
-
-  // actions
-  const canAct = !!report.direct_ip_path && !!report.init_script;
-  $("#actions-enabled").hidden = !canAct;
-  $("#actions-disabled").hidden = canAct;
-  if (canAct) {
-    $("#direct-path").textContent = report.direct_ip_path;
-    refreshList();
-  }
+  banner.textContent = `${label}  ·  主配置: ${r?.primary_config || "-"}  ·  init: ${r?.init_script || "-"}  ·  direct_ip: ${r?.direct_ip_path || "-"}`;
 }
 
 async function onRedetect() {
   try {
-    const report = await invoke("redetect");
-    state.report = report;
-    renderReport(report);
-  } catch (e) {
-    alert(formatError(e));
-  }
+    ctx.report = await api.redetect();
+    ctx.config = ctx.report.primary_config || ctx.config;
+    renderBanner();
+    await ctx.refreshAndRedraw();
+    toast("已重新检测");
+  } catch (e) { toast(formatError(e), "warn"); }
 }
 
-// ---------------- 直连列表 ----------------
-async function refreshList() {
-  if (!state.report?.direct_ip_path) return;
-  try {
-    const data = await invoke("list_direct", { path: state.report.direct_ip_path });
-    $("#entry-count").textContent = String(data.entries.length);
-    const ul = $("#direct-list");
-    ul.replaceChildren(...data.entries.map((entry) => {
-      const li = document.createElement("li");
-      const span = document.createElement("span"); span.textContent = entry;
-      const btn = document.createElement("button"); btn.className = "danger ghost"; btn.textContent = "删除";
-      btn.addEventListener("click", () => onRemoveEntry(entry));
-      li.append(span, btn);
-      return li;
-    }));
-  } catch (e) {
-    showAddMsg(formatError(e), true);
-  }
+async function onRefreshAll() {
+  try { await ctx.refreshAndRedraw(); toast("已刷新"); }
+  catch (e) { toast(formatError(e), "warn"); }
 }
 
-async function onAddEntry(ev) {
-  ev.preventDefault();
-  const f = ev.currentTarget;
-  const entry = f.entry.value.trim();
-  if (!entry) return;
-  try {
-    const added = await invoke("add_direct", { path: state.report.direct_ip_path, entry });
-    if (added) {
-      showAddMsg(`已加入直连：${entry}（注意：需 reload / restart PassWall 才会生效）`);
-      f.entry.value = "";
-      refreshList();
-    } else {
-      showAddMsg(`${entry} 已存在，未重复添加`, true);
-    }
-  } catch (e) {
-    showAddMsg(formatError(e), true);
-  }
-}
-
-async function onRemoveEntry(entry) {
-  if (!confirm(`从直连列表删除 ${entry}？`)) return;
-  try {
-    await invoke("remove_direct", { path: state.report.direct_ip_path, entry });
-    refreshList();
-  } catch (e) {
-    showAddMsg(formatError(e), true);
-  }
-}
-
-async function onServiceAction(action) {
-  const name = state.report?.init_script;
+async function onService(action) {
+  const name = ctx.report?.init_script || ctx.config;
   if (!name) return;
   const desc = action === "restart" ? "重启" : "重载";
-  if (!confirm(`确认 ${desc} ${name}？这将短暂中断代理连接。`)) return;
+  if (!confirm(`确认 ${desc} ${name}？这将短暂中断代理。`)) return;
   try {
-    await invoke(action === "restart" ? "restart_service" : "reload_service", { name });
-    showAddMsg(`${desc} ${name} 成功`);
-  } catch (e) {
-    showAddMsg(formatError(e), true);
-  }
+    if (action === "restart") await api.restartService(name);
+    else await api.reloadService(name);
+    toast(`${desc} ${name} 成功`);
+  } catch (e) { toast(formatError(e), "warn"); }
 }
 
-// ---------------- 工具 ----------------
-function setStatus(text) { $("#status-line").textContent = text; }
-
-function showAddMsg(text, warn = false) {
-  const el = $("#add-msg");
-  el.textContent = text;
-  el.className = "msg" + (warn ? " warn" : "");
-  el.hidden = false;
-}
-
-function formatError(e) {
-  if (!e) return "未知错误";
-  if (typeof e === "string") return e;
-  if (e.message) return e.message;
-  try { return JSON.stringify(e); } catch { return String(e); }
-}
+// 暴露给 view 内部统一刷新
+export { ctx };

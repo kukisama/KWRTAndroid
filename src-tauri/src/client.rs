@@ -76,50 +76,84 @@ impl LuciClient {
             username: opts.username.clone(),
         };
 
-        // 1) 表单登录拿 sysauth（用于 /cgi-bin/luci 的所有访问）
-        client.login_form(&opts.username, &opts.password).await?;
-        // 2) ubus 会话登录（用于程序化调用）
+        // 1) 先 ubus 登录（最稳；不依赖 LuCI 主题/表单字段）
         client.login_ubus(&opts.username, &opts.password).await?;
+        // 2) 再尝试 form login 拿 sysauth cookie（用于 WebView 直接访问 LuCI 页面）；
+        //    失败不阻断 —— 真正的业务调用全走 ubus。
+        if let Err(e) = client.login_form(&opts.username, &opts.password).await {
+            log::warn!("form login 失败（不影响 ubus 调用）：{e:#}");
+        }
         Ok(client)
     }
 
     async fn login_form(&mut self, user: &str, pass: &str) -> Result<()> {
         let url = self.base_url.join("cgi-bin/luci/")?;
-        // LuCI 默认登录表单字段：luci_username / luci_password
-        let form = [("luci_username", user), ("luci_password", pass)];
-        let resp = self
-            .http
-            .post(url.clone())
-            .form(&form)
-            .send()
-            .await
-            .with_context(|| format!("无法访问 {url}（路由器是否可达？端口是否正确？）"))?;
-        // 成功标志：响应头里能拿到 sysauth*=… Cookie，或重定向到 /admin
-        let mut found: Option<String> = None;
-        for cookie in resp.cookies() {
-            let name = cookie.name();
-            if name.starts_with("sysauth") {
-                found = Some(format!("{}={}", name, cookie.value()));
-                break;
-            }
-        }
-        if found.is_none() {
-            // 个别主题会在 302 之后才下发；reqwest 默认会跟随重定向，cookie 仍会写入 store。
-            // 这里再用 cookie_store 查一次。
-            // reqwest 0.12 没有公开 cookie_store；通过对根路径再发一次请求来探测。
-            let probe = self.http.get(self.base_url.clone()).send().await?;
-            for cookie in probe.cookies() {
-                let name = cookie.name();
+        // 不同 LuCI 主题/版本字段名不同：
+        //   - 经典 LuCI:    luci_username / luci_password
+        //   - 新版 LuCI:    username / password
+        // 两套都试一遍，谁先拿到 sysauth 就用谁。
+        let candidates: [&[(&str, &str)]; 2] = [
+            &[("luci_username", user), ("luci_password", pass)],
+            &[("username", user), ("password", pass)],
+        ];
+
+        let mut last_status: Option<u16> = None;
+        let mut last_body_head: Option<String> = None;
+
+        for form in candidates.iter() {
+            log::debug!("form login POST {url} fields={:?}", form.iter().map(|(k,_)| k).collect::<Vec<_>>());
+            let resp = self
+                .http
+                .post(url.clone())
+                .form(form)
+                .send()
+                .await
+                .with_context(|| format!("无法访问 {url}（路由器是否可达？端口是否正确？）"))?;
+            let status = resp.status();
+            let cookies: Vec<(String, String)> = resp
+                .cookies()
+                .map(|c| (c.name().to_string(), c.value().to_string()))
+                .collect();
+            log::debug!("form login resp status={status} cookies={cookies:?} url={}", resp.url());
+
+            for (name, value) in &cookies {
                 if name.starts_with("sysauth") {
-                    found = Some(format!("{}={}", name, cookie.value()));
-                    break;
+                    self.sysauth = Some(format!("{name}={value}"));
+                    return Ok(());
+                }
+            }
+
+            last_status = Some(status.as_u16());
+            let body = resp.text().await.unwrap_or_default();
+            let head: String = body.chars().take(400).collect();
+            log::debug!("form login body head: {head}");
+            last_body_head = Some(head);
+
+            // 再拿一次根路径，看 cookie_store 是否在 302 之后才落
+            if let Ok(probe) = self.http.get(self.base_url.clone()).send().await {
+                for cookie in probe.cookies() {
+                    if cookie.name().starts_with("sysauth") {
+                        self.sysauth = Some(format!("{}={}", cookie.name(), cookie.value()));
+                        return Ok(());
+                    }
                 }
             }
         }
-        let cookie =
-            found.ok_or_else(|| anyhow!("表单登录失败：未拿到 sysauth Cookie（密码是否正确？）"))?;
-        self.sysauth = Some(cookie);
-        Ok(())
+
+        // 兜底：如果 ubus 已经登录成功，直接把 ubus session 当作 sysauth cookie 注入
+        if let Some(sess) = &self.ubus_session {
+            log::warn!("form login 没拿到 sysauth，用 ubus session 兜底注入 sysauth cookie");
+            self.sysauth = Some(format!("sysauth_http={sess}"));
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "表单登录失败：未拿到 sysauth Cookie（HTTP {status:?}，body 前 400 字: {body:?}）。\
+             可能原因：1) LuCI 表单字段名与本程序不匹配；2) 登录页要求 CSRF token；3) 账号/密码错误；\
+             4) 该 LuCI 主题禁用了表单登录。",
+            status = last_status,
+            body = last_body_head
+        ))
     }
 
     async fn login_ubus(&mut self, user: &str, pass: &str) -> Result<()> {
@@ -260,6 +294,71 @@ impl LuciClient {
     pub async fn rc_init(&self, name: &str, action: &str) -> Result<Value> {
         self.ubus_call("rc", "init", json!({ "name": name, "action": action }))
             .await
+    }
+
+    /// uci set：写入若干 option（不会自动 commit）。
+    pub async fn uci_set(
+        &self,
+        config: &str,
+        section: &str,
+        values: Value,
+    ) -> Result<Value> {
+        self.ubus_call(
+            "uci",
+            "set",
+            json!({ "config": config, "section": section, "values": values }),
+        )
+        .await
+    }
+
+    /// uci add：新增匿名 section，可附带 values。返回 result 里通常带 `section` = 新名。
+    pub async fn uci_add(
+        &self,
+        config: &str,
+        section_type: &str,
+        name: Option<&str>,
+        values: Value,
+    ) -> Result<Value> {
+        let mut p = serde_json::Map::new();
+        p.insert("config".into(), json!(config));
+        p.insert("type".into(), json!(section_type));
+        if let Some(n) = name {
+            p.insert("name".into(), json!(n));
+        }
+        p.insert("values".into(), values);
+        self.ubus_call("uci", "add", Value::Object(p)).await
+    }
+
+    /// uci delete section 或 option。
+    pub async fn uci_delete(
+        &self,
+        config: &str,
+        section: &str,
+        option: Option<&str>,
+    ) -> Result<Value> {
+        let mut p = serde_json::Map::new();
+        p.insert("config".into(), json!(config));
+        p.insert("section".into(), json!(section));
+        if let Some(o) = option {
+            p.insert("option".into(), json!(o));
+        }
+        self.ubus_call("uci", "delete", Value::Object(p)).await
+    }
+
+    /// uci commit：写盘。
+    pub async fn uci_commit(&self, config: &str) -> Result<Value> {
+        self.ubus_call("uci", "commit", json!({ "config": config }))
+            .await
+    }
+
+    /// 通过 file.exec 调用 shell 命令；某些固件可能禁用，调用方需容错。
+    pub async fn file_exec(&self, command: &str, params: Vec<&str>) -> Result<Value> {
+        self.ubus_call(
+            "file",
+            "exec",
+            json!({ "command": command, "params": params }),
+        )
+        .await
     }
 
     pub async fn system_board(&self) -> Result<Value> {
