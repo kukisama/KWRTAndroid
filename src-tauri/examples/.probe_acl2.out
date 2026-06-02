@@ -1,0 +1,282 @@
+   Compiling kwrt-controller v0.1.0 (C:\Scripts\projects\KWRTAndroid\src-tauri)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.68s
+     Running `target\debug\examples\probe_acl2.exe`
+
+========== find_acl_cbi ==========
+/usr/lib/lua/luci/model/cbi/passwall/client/acl.lua
+/usr/lib/lua/luci/model/cbi/passwall/client/acl_config.lua
+[exit=0]
+
+========== acl_index_lua ==========
+[err] shell 鍛戒护澶辫触 exit=1: FILE=
+
+
+========== acl_detail_lua ==========
+FILE=/usr/lib/lua/luci/model/cbi/passwall/client/acl.lua
+local api = require "luci.passwall.api"
+local appname = "passwall"
+local sys = api.sys
+
+m = Map(appname)
+api.set_apply_on_parse(m)
+
+s = m:section(TypedSection, "global", translate("ACLs"), "<font color='red'>" .. translate("ACLs is a tools which used to designate specific IP proxy mode.") .. "</font>")
+s.anonymous = true
+
+o = s:option(Flag, "acl_enable", translate("Main switch"))
+o.rmempty = false
+o.default = false
+
+-- [[ ACLs Settings ]]--
+s = m:section(TypedSection, "acl_rule")
+s.template = "cbi/tblsection"
+s.sortable = true
+s.anonymous = true
+s.addremove = true
+s.extedit = api.url("acl_config", "%s")
+function s.create(e, t)
+	t = TypedSection.create(e, t)
+	luci.http.redirect(e.extedit:format(t))
+end
+function s.remove(e, t)
+	sys.call("rm -rf /tmp/etc/passwall_tmp/dns_" .. t .. "*")
+	TypedSection.remove(e, t)
+end
+
+---- Enable
+o = s:option(Flag, "enabled", translate("Enable"))
+o.default = 1
+o.rmempty = false
+
+---- Remarks
+[exit=0]
+
+========== controller_acl ==========
+o = s:option(Value, "remarks", translate("Remarks"))
+o.rmempty = true
+
+local mac_t = {}
+sys.net.mac_hints(function(e, t)
+	mac_t[e] = {
+		ip = t,
+		mac = e
+	}
+end)
+
+o = s:option(DummyValue, "sources", translate("Source"))
+o.rawhtml = true
+o.cfgvalue = function(t, n)
+	local e = ''
+	local v = Value.cfgvalue(t, n) or '-'
+	string.gsub(v, '[^' .. " " .. ']+', function(w)
+		local a = w
+		if mac_t[w] then
+			a = a .. ' (' .. mac_t[w].ip .. ')'
+		end
+		if #e > 0 then
+			e = e .. "<br />"
+		end
+		e = e .. a
+	end)
+	return e
+end
+
+o = s:option(DummyValue, "interface", translate("Source Interface"))
+o.cfgvalue = function(t, n)
+	local v = Value.cfgvalue(t, n) or '-'
+	return v
+end
+
+--[[
+---- TCP No Redir Ports
+o = s:option(Value, "tcp_no_redir_ports", translate("TCP No Redir Ports"))
+o.default = "default"
+o:value("disable", translate("No patterns are used"))
+o:value("default", translate("Default"))
+o:value("1:65535", translate("All"))
+
+---- UDP No Redir Ports
+o = s:option(Value, "udp_no_redir_ports", translate("UDP No Redir Ports"))
+o.default = "default"
+o:value("disable", translate("No patterns are used"))
+o:value("default", translate("Default"))
+o:value("1:65535", translate("All"))
+
+---- TCP Redir Ports
+o = s:option(Value, "tcp_redir_ports", translate("TCP Redir Ports"))
+o.default = "default"
+o:value("default", translate("Default"))
+o:value("1:65535", translate("All"))
+o:value("80,443", "80,443")
+o:value("80:65535", "80 " .. translate("or more"))
+o:value("1:443", "443 " .. translate("or less"))
+
+---- UDP Redir Ports
+o = s:option(Value, "udp_redir_ports", translate("UDP Redir Ports"))
+o.default = "default"
+o:value("default", translate("Default"))
+o:value("1:65535", translate("All"))
+o:value("53", "53")
+]]--
+
+return m
+55:	entry({"admin", "services", appname, "acl"}, cbi(appname .. "/client/acl"), _("Access control"), 98).leaf = true
+56:	entry({"admin", "services", appname, "acl_config"}, cbi(appname .. "/client/acl_config")).leaf = true
+239:	local path = "/tmp/etc/passwall/acl/default"
+241:	local tcp_node = api.get_cache_var("ACL_GLOBAL_TCP_node")
+245:	local udp_node = api.get_cache_var("ACL_GLOBAL_UDP_node")
+255:	local path = "/tmp/etc/passwall/acl/" .. name
+283:	local path = "/tmp/etc/passwall/acl/" .. flag .. "/chinadns_ng.log"
+414:	e.socks_status = luci.sys.call(string.format("/bin/busybox top -bn1 | grep -v 'grep' | grep '/tmp/etc/passwall/bin/' | grep -v '_acl_' | grep '%s' | grep 'SOCKS_' > /dev/null", id)) == 0
+419:		e.http_status = luci.sys.call(string.format("/bin/busybox top -bn1 | grep -v 'grep' | grep '/tmp/etc/passwall/bin/' | grep -v '_acl_' | grep '%s' | grep -E 'HTTP_|HTTP2SOCKS' > /dev/null", id)) == 0
+589:	uci:foreach(appname, "acl_rule", function(t)
+637:		uci:foreach(appname, "acl_rule", function(t)
+[exit=0]
+
+========== default_acl_section ==========
+[err] shell 鍛戒护澶辫触 exit=1: 
+
+========== uci_add_dry ==========
+will use: uci add passwall acl_rule; uci set ...sources/tcp_node/udp_node/enabled/remarks
+[exit=0]
+
+========== cpu_proc_stat ==========
+cpu  334006 0 255660 28719755 448 0 19051 0 0 0
+processor		: 0
+BogoMIPS		: 586.13
+processor		: 1
+BogoMIPS		: 586.13
+processor		: 2
+BogoMIPS		: 586.13
+processor		: 3
+BogoMIPS		: 586.13
+[exit=0]
+
+========== disk_block_devices ==========
+[exit=0]
+
+========== ls_root ==========
+loop0
+loop1
+loop2
+loop3
+loop4
+loop5
+loop6
+loop7
+mtdblock0
+mtdblock1
+mtdblock10
+mtdblock11
+mtdblock12
+mtdblock13
+mtdblock14
+mtdblock15
+mtdblock16
+mtdblock17
+mtdblock18
+mtdblock19
+mtdblock2
+mtdblock20
+mtdblock21
+mtdblock22
+mtdblock23
+mtdblock24
+mtdblock25
+mtdblock26
+mtdblock27
+mtdblock28
+mtdblock3
+mtdblock4
+mtdblock5
+mtdblock6
+mtdblock7
+mtdblock8
+mtdblock9
+ubiblock0_0
+zram0
+---
+/dev/ubi0
+/dev/ubi0_0
+/dev/ubi0_1
+/dev/ubi_ctrl
+/dev/ubiblock0_0
+---
+dev:    size   erasesize  name
+mtd0: 00100000 00020000 "u-boot"
+mtd1: 00100000 00020000 "SC PART_MAP"
+mtd2: 00400000 00020000 "kernel"
+mtd3: 02800000 00020000 "ubi"
+mtd4: 00200000 00020000 "English UI"
+mtd5: 00200000 00020000 "ML1"
+mtd6: 00200000 00020000 "ML2"
+mtd7: 00200000 00020000 "ML3"
+mtd8: 00200000 00020000 "ML4"
+mtd9: 00200000 00020000 "ML5"
+mtd10: 00200000 00020000 "ML6"
+mtd11: 00200000 00020000 "ML7"
+mtd12: 00200000 00020000 "ML8"
+mtd13: 00200000 00020000 "ML9"
+mtd14: 00200000 00020000 "ML10"
+mtd15: 00200000 00020000 "ML11"
+mtd16: 00200000 00020000 "factory"
+mtd17: 00200000 00020000 "SC Private Data"
+mtd18: 00200000 00020000 "POT"
+mtd19: 00200000 00020000 "Traffic Meter"
+mtd20: 00200000 00020000 "SC PID"
+mtd21: 00200000 00020000 "SC Nvram"
+mtd22: 00200000 00020000 "Ralink Nvram"
+mtd23: 00200000 00020000 "reserved0"
+mtd24: 00200000 00020000 "reserved1"
+mtd25: 00200000 00020000 "reserved2"
+mtd26: 00200000 00020000 "reserved3"
+mtd27: 00200000 00020000 "reserved4"
+mtd28: 02180000 00020000 "reserved5"
+[exit=0]
+drwxr-xr-x    1 root     root           480 May 22 22:54 .
+drwxr-xr-x    1 root     root           480 May 22 22:54 ..
+drwxr-xr-x    2 root     root           845 Apr 22 19:54 bin
+drwxr-xr-x    4 root     root          2940 May 24 19:04 dev
+drwxr-xr-x    1 root     root          1784 May 22 22:54 etc
+drwxr-xr-x    1 root     root           224 Apr 22 19:54 lib
+drwxr-xr-x    2 root     root             3 Apr 22 19:54 mnt
+drwxr-xr-x    4 root     root           360 May 22 22:54 overlay
+dr-xr-xr-x  210 root     root             0 Jan  1  1970 proc
+drwxr-xr-x   16 root     root           235 Dec 28 09:23 rom
+drwxr-x---    2 root     root             3 Apr 22 19:54 root
+lrwxrwxrwx    1 root     root             8 May 22 22:54 run -> /var/run
+drwxr-xr-x    2 root     root          1006 Apr 22 19:54 sbin
+dr-xr-xr-x   11 root     root             0 Jan  1  1970 sys
+drwxrwxrwt   21 root     root           540 Jun  2 19:54 tmp
+drwxr-xr-x    1 root     root           560 May 22 22:54 usr
+
+========== ls_etc_config ==========
+lrwxrwxrwx    1 root     root             3 Apr 22 19:54 var -> tmp
+drwxr-xr-x    1 root     root           232 Apr 22 19:54 www
+drwxr-xr-x    1 root     root          1792 Jun  2 19:49 .
+[exit=0]
+drwxr-xr-x    1 root     root          1784 May 22 22:54 ..
+-rw-r--r--    1 root     root           122 Feb 21  2025 77_syscontrol
+-rw-r--r--    1 root     root          2425 Feb 21  2025 advancedplus
+-rw-r--r--    1 root     root           260 Feb 21  2025 argon
+-rw-r--r--    1 root     root            70 Feb 21  2025 base_config
+-rw-r--r--    1 root     root            91 Feb 21  2025 design
+-rw-------    1 root     root          1428 Jun  2 19:49 dhcp
+-rw-------    1 root     root           118 May 22 22:54 dropbear
+-rw-r--r--    1 root     root          2889 May 22 22:54 firewall
+-rw-r--r--    1 root     root           150 Feb 21  2025 fstab
+-rw-r--r--    1 root     root          1049 May 22 22:54 luci
+-rw-r--r--    1 root     root            81 Feb 21  2025 luci-fan
+-rw-------    1 root     root           794 May 22 22:54 network
+-rw-------    1 root     root          1033 Feb 21  2025 nginx
+-rw-r--r--    1 root     root           129 Feb 21  2025 partexp
+-rw-r--r--    1 root     root         10031 Jun  2 19:49 passwall
+-rw-r--r--    1 root     root            44 Feb 21  2025 passwall_server
+-rw-------    1 root     root           167 Feb 21  2025 rpcd
+-rw-r--r--    1 root     root          1322 Feb 21  2025 shadowsocks-libev
+-rw-------    1 root     root          1136 Feb 21  2025 system
+-rw-r--r--    1 root     root            73 Feb 21  2025 ubihealthd
+-rw-------    1 root     root           816 Feb 21  2025 upnpd
+-rw-r--r--    1 root     root           988 Aug 16  2025 wireless
+-rw-r--r--    1 root     root           364 May 22 22:54 wizard
+-rw-------    1 root     root           208 Feb 21  2025 xray

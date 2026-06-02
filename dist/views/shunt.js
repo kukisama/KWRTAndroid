@@ -17,7 +17,7 @@ export default async function mount(root, ctx) {
 
   root.append(el("section", { class: "card" }, [
     el("h3", {}, "分流规则"),
-    el("p", { class: "hint" }, "对应 PassWall "分流" 页：为不同站点 / 网段指定不同节点（或直接直连）。每条规则保存后自动 reload。"),
+    el("p", { class: "hint" }, "对应 PassWall 分流 页：为不同站点 / 网段指定不同节点（或直接直连）。每条规则保存后自动 reload。"),
   ]));
 
   if (!rules.length) {
@@ -57,12 +57,12 @@ function renderRule(r, ctx, nodeOptions) {
           node: nodeSel.value,
         };
         try { await api.patchSection(ctx.config, name, patch); toast(`已保存：${name}`); await ctx.refreshAndRedraw(); }
-        catch (e) { toast(formatError(e), "warn"); }
+        catch (e) { toast("操作失败", "warn", { detail: formatError(e) }); }
       } }, "保存"),
       el("button", { class: "danger ghost", tip: "删除整条分流规则", onclick: async () => {
         if (!confirm(`确认删除规则 ${name} (${r.remarks || ""})?`)) return;
         try { await api.deleteSection(ctx.config, name); await ctx.refreshAndRedraw(); toast("已删除"); }
-        catch (e) { toast(formatError(e), "warn"); }
+        catch (e) { toast("操作失败", "warn", { detail: formatError(e) }); }
       } }, "删除"),
     ]),
   );

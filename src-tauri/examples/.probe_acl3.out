@@ -1,0 +1,676 @@
+   Compiling kwrt-controller v0.1.0 (C:\Scripts\projects\KWRTAndroid\src-tauri)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.96s
+     Running `target\debug\examples\probe_acl3.exe`
+
+========== ls_root_raw ==========
+drwxr-xr-x    1 root     root           480 May 22 22:54 .
+drwxr-xr-x    1 root     root           480 May 22 22:54 ..
+drwxr-xr-x    2 root     root           845 Apr 22 19:54 bin
+drwxr-xr-x    4 root     root          2940 May 24 19:04 dev
+drwxr-xr-x    1 root     root          1784 May 22 22:54 etc
+drwxr-xr-x    1 root     root           224 Apr 22 19:54 lib
+[exit=0 len_out=1131 len_err=0]
+drwxr-xr-x    2 root     root             3 Apr 22 19:54 mnt
+drwxr-xr-x    4 root     root           360 May 22 22:54 overlay
+dr-xr-xr-x  219 root     root             0 Jan  1  1970 proc
+
+drwxr-xr-x   16 root     root           235 Dec 28 09:23 rom
+========== ls_etc_config_raw ==========
+drwxr-x---    2 root     root             3 Apr 22 19:54 root
+lrwxrwxrwx    1 root     root             8 May 22 22:54 run -> /var/run
+drwxr-xr-x    2 root     root          1006 Apr 22 19:54 sbin
+dr-xr-xr-x   11 root     root             0 Jan  1  1970 sys
+drwxrwxrwt   21 root     root           540 Jun  2 20:09 tmp
+drwxr-xr-x    1 root     root           560 May 22 22:54 usr
+lrwxrwxrwx    1 root     root             3 Apr 22 19:54 var -> tmp
+drwxr-xr-x    1 root     root           232 Apr 22 19:54 www
+---END---
+drwxr-xr-x    1 root     root          1792 Jun  2 20:08 .
+[exit=0 len_out=1707 len_err=0]
+drwxr-xr-x    1 root     root          1784 May 22 22:54 ..
+-rw-r--r--    1 root     root           122 Feb 21  2025 77_syscontrol
+-rw-r--r--    1 root     root          2425 Feb 21  2025 advancedplus
+-rw-r--r--    1 root     root           260 Feb 21  2025 argon
+-rw-r--r--    1 root     root            70 Feb 21  2025 base_config
+-rw-r--r--    1 root     root            91 Feb 21  2025 design
+-rw-------    1 root     root          1428 Jun  2 20:06 dhcp
+-rw-------    1 root     root           118 May 22 22:54 dropbear
+-rw-r--r--    1 root     root          2889 May 22 22:54 firewall
+
+-rw-r--r--    1 root     root           150 Feb 21  2025 fstab
+========== ls_alt_print ==========
+-rw-r--r--    1 root     root          1049 May 22 22:54 luci
+-rw-r--r--    1 root     root            81 Feb 21  2025 luci-fan
+-rw-------    1 root     root           794 May 22 22:54 network
+-rw-------    1 root     root          1033 Feb 21  2025 nginx
+-rw-r--r--    1 root     root           129 Feb 21  2025 partexp
+-rw-r--r--    1 root     root         10557 Jun  2 20:06 passwall
+-rw-r--r--    1 root     root            44 Feb 21  2025 passwall_server
+-rw-------    1 root     root           167 Feb 21  2025 rpcd
+-rw-r--r--    1 root     root          1322 Feb 21  2025 shadowsocks-libev
+-rw-------    1 root     root          1136 Feb 21  2025 system
+-rw-r--r--    1 root     root            73 Feb 21  2025 ubihealthd
+-rw-------    1 root     root           816 Feb 21  2025 upnpd
+-rw-r--r--    1 root     root           988 Aug 16  2025 wireless
+-rw-r--r--    1 root     root           364 May 22 22:54 wizard
+-rw-------    1 root     root           208 Feb 21  2025 xray
+---END---
+---END---
+[exit=0 len_out=10 len_err=135]
+--stderr--
+cat: unrecognized option: A
+BusyBox v1.37.0 (2026-04-22 11:54:49 UTC) multi-call binary.
+
+Usage: cat [FILE]...
+
+Print FILEs to stdout
+
+
+
+========== busybox_ver ==========
+busybox: applet not found
+---
+BusyBox v1.37.0 (2026-04-22 11:54:49 UTC) multi-call binary.
+
+Usage: ls [-1AaCxdLHRFplinshrSXvctu] [-w WIDTH] [FILE]...
+---END---
+[exit=0 len_out=160 len_err=0]
+
+========== acl_config_lua_full ==========
+local api = require "luci.passwall.api"
+[exit=0 len_out=12628 len_err=0]
+local appname = "passwall"
+
+m = Map(appname)
+m.redirect = api.url("acl")
+api.set_apply_on_parse(m)
+
+if not arg[1] or not m:get(arg[1]) then
+	luci.http.redirect(m.redirect)
+end
+
+m:append(Template(appname .. "/cbi/nodes_listvalue_com"))
+
+local fs = api.fs
+local sys = api.sys
+local has_singbox = api.finded_com("sing-box")
+local has_xray = api.finded_com("xray")
+local has_gfwlist = fs.access("/usr/share/passwall/rules/gfwlist")
+local has_chnlist = fs.access("/usr/share/passwall/rules/chnlist")
+local has_chnroute = fs.access("/usr/share/passwall/rules/chnroute")
+
+local port_validate = function(self, value, t)
+	return value:gsub("-", ":")
+end
+
+local nodes_table = {}
+for _, e in ipairs(api.get_valid_nodes()) do
+	nodes_table[#nodes_table + 1] = e
+end
+
+local normal_list = {}
+for _, v in pairs(nodes_table) do
+	if v.node_type == "normal" then
+		normal_list[#normal_list + 1] = v
+	end
+end
+
+local socks_list = {}
+m.uci:foreach(appname, "socks", function(s)
+	if s.enabled == "1" and s.node then
+		socks_list[#socks_list + 1] = {
+			id = "Socks_" .. s[".name"],
+			remark = translate("Socks Config") .. " " .. string.format("[%s %s]", s.port, translate("Port")),
+			group = "Socks"
+		}
+	end
+end)
+
+local dynamicList_write = function(self, section, value)
+	local t = {}
+	local t2 = {}
+	if type(value) == "table" then
+		local x
+		for _, x in ipairs(value) do
+			if x and #x > 0 then
+				if not t2[x] then
+					t2[x] = x
+					t[#t+1] = x
+				end
+			end
+		end
+	else
+		t = { value }
+	end
+	t = table.concat(t, " ")
+	return DynamicList.write(self, section, t)
+end
+
+-- [[ ACLs Settings ]]--
+s = m:section(NamedSection, arg[1], translate("ACLs"), translate("ACLs"))
+s.addremove = false
+s.dynamic = false
+
+---- Enable
+o = s:option(Flag, "enabled", translate("Enable"))
+o.default = 1
+o.rmempty = false
+
+---- Remarks
+o = s:option(Value, "remarks", translate("Remarks"))
+o.default = arg[1]
+o.rmempty = false
+
+o = s:option(Value, "interface", translate("Source Interface"))
+o:value("", translate("All"))
+-- Populate with actual kernel network devices instead of UCI interface names,
+-- because the backend (nftables iifname / iptables -i) matches kernel device names.
+do
+	local nfs = require "nixio.fs"
+	local _cursor = require("luci.model.uci").cursor()
+	local _sysnet = "/sys/class/net/"
+
+	-- Map UCI interface names to their device names and vice versa
+	local _iface_to_dev = {}
+	local _dev_to_ifaces = {}
+	local _iface_proto = {}
+	_cursor:foreach("network", "interface", function(sec)
+		local name = sec[".name"]
+		if name ~= "loopback" then
+			_iface_proto[name] = sec.proto
+			if sec.device then
+				_iface_to_dev[name] = sec.device
+				_dev_to_ifaces[sec.device] = _dev_to_ifaces[sec.device] or {}
+				table.insert(_dev_to_ifaces[sec.device], name)
+			end
+		end
+	end)
+
+	-- Classify device type using sysfs attributes
+	local function classify_sysfs(dev)
+		if nfs.stat(_sysnet .. dev .. "/bridge", "type") == "dir" then
+			return translate("Bridge")
+		elseif nfs.stat(_sysnet .. dev .. "/wireless", "type") == "dir" then
+			return translate("Wireless Adapter")
+		elseif dev:match("^tun") or dev:match("^tap") or dev:match("^wg") or dev:match("^ppp") then
+			return translate("Tunnel Interface")
+		else
+			return translate("Ethernet Adapter")
+		end
+	end
+
+	-- Classify offline UCI interfaces by config hints
+	local function classify_uci(dev_name, proto)
+		if dev_name and dev_name:match("^br%-") then
+			return translate("Bridge")
+		elseif proto == "wireguard" or proto == "pppoe" or proto == "pptp" or proto == "l2tp" then
+			return translate("Tunnel Interface")
+		else
+			return translate("Interface")
+		end
+	end
+
+	local _seen = {}
+	local _devices = {}
+
+	-- Active kernel devices from /sys/class/net/.
+	-- Skip bridge member ports (/master) and DSA master devices (/dsa) because
+	-- nftables iifname matches the parent bridge for routed traffic, not
+	-- individual member ports. Also skip internal virtual devices.
+	local _iter = nfs.dir(_sysnet)
+	if _iter then
+		for dev in _iter do
+			if dev ~= "lo"
+				and not dev:match("^veth")
+				and not dev:match("^ifb")
+				and not dev:match("^gre")
+				and not dev:match("^sit")
+				and not dev:match("^ip6tnl")
+				and not dev:match("^erspan")
+				and not nfs.stat(_sysnet .. dev .. "/master", "type")
+				and not nfs.stat(_sysnet .. dev .. "/dsa", "type")
+			then
+				local dtype = classify_sysfs(dev)
+				local label = dtype .. ': "' .. dev .. '"'
+				if _dev_to_ifaces[dev] then
+					label = label .. " (" .. table.concat(_dev_to_ifaces[dev], ", ") .. ")"
+				end
+				_devices[#_devices + 1] = { name = dev, label = label, sort = dtype .. ":" .. dev }
+				_seen[dev] = true
+			end
+		end
+	end
+
+	-- UCI interfaces whose device does not currently exist (down tunnels, VPNs, etc.).
+	-- Stored by UCI name since the kernel device is not available yet.
+	-- Dedup by device: if two interfaces share a device, only one is shown.
+	for iface, dev in pairs(_iface_to_dev) do
+		if not _seen[dev] then
+			local dtype = classify_uci(dev, _iface_proto[iface])
+			local label = dtype .. ': "' .. iface .. '"'
+			-- Sort offline entries after active devices
+			_devices[#_devices + 1] = { name = iface, label = label, sort = "zzz:" .. iface }
+			_seen[dev] = true
+		end
+	end
+
+	table.sort(_devices, function(a, b) return a.sort < b.sort end)
+	for _, d in ipairs(_devices) do
+		o:value(d.name, d.label)
+	end
+end
+
+o.validate = function(self, value, section)
+	if value == "" or value:match("^[a-zA-Z0-9][a-zA-Z0-9%.%_%-]*$") then
+		return value
+	end
+	return nil, translate("Invalid interface name")
+end
+
+local mac_t = {}
+sys.net.mac_hints(function(e, t)
+	mac_t[#mac_t + 1] = {
+		ip = t,
+		mac = e
+	}
+end)
+table.sort(mac_t, function(a,b)
+	if #a.ip < #b.ip then
+		return true
+	elseif #a.ip == #b.ip then
+		if a.ip < b.ip then
+			return true
+		else
+			return #a.ip < #b.ip
+		end
+	end
+	return false
+end)
+
+---- Source
+sources = s:option(DynamicList, "sources", translate("Source"))
+sources.description = "<ul><li>" .. translate("Example:")
+.. "</li><li>" .. translate("MAC") .. ": 00:00:00:FF:FF:FF"
+.. "</li><li>" .. translate("IP") .. ": 192.168.1.100"
+.. "</li><li>" .. translate("IP CIDR") .. ": 192.168.1.0/24"
+.. "</li><li>" .. translate("IP range") .. ": 192.168.1.100-192.168.1.200"
+.. "</li><li>" .. translate("IPSet") .. ": ipset:lanlist"
+.. "</li></ul>"
+sources.cast = "string"
+for _, key in pairs(mac_t) do
+	sources:value(key.mac, "%s (%s)" % {key.mac, key.ip})
+end
+sources.cfgvalue = function(self, section)
+	local value
+	if self.tag_error[section] then
+		value = self:formvalue(section)
+	else
+		value = self.map:get(section, self.option)
+		if type(value) == "string" then
+			local value2 = {}
+			string.gsub(value, '[^' .. " " .. ']+', function(w) table.insert(value2, w) end)
+			value = value2
+		end
+	end
+	return value
+end
+sources.validate = function(self, value, t)
+	local err = {}
+	for _, v in ipairs(value) do
+		local flag = false
+		if v:find("ipset:") and v:find("ipset:") == 1 then
+			local ipset = v:gsub("ipset:", "")
+			if ipset and ipset ~= "" then
+				flag = true
+			end
+		end
+
+		if flag == false and datatypes.macaddr(v) then
+			flag = true
+		end
+
+		if flag == false and datatypes.ip4addr(v) then
+			flag = true
+		end
+
+		if flag == false and api.iprange(v) then
+			flag = true
+		end
+
+		if flag == false then
+			err[#err + 1] = v
+		end
+	end
+
+	if #err > 0 then
+		self:add_error(t, "invalid", translate("Not true format, please re-enter!"))
+		for _, v in ipairs(err) do
+			self:add_error(t, "invalid", v)
+		end
+	end
+
+	return value
+end
+sources.write = dynamicList_write
+
+---- TCP No Redir Ports
+local TCP_NO_REDIR_PORTS = m:get("@global_forwarding[0]", "tcp_no_redir_ports")
+o = s:option(Value, "tcp_no_redir_ports", translate("TCP No Redir Ports"))
+o:value("", translate("Use global config") .. "(" .. TCP_NO_REDIR_PORTS .. ")")
+o:value("disable", translate("No patterns are used"))
+o:value("1:65535", translate("All"))
+o.validate = port_validate
+
+---- UDP No Redir Ports
+local UDP_NO_REDIR_PORTS = m:get("@global_forwarding[0]", "udp_no_redir_ports")
+o = s:option(Value, "udp_no_redir_ports", translate("UDP No Redir Ports"),
+	"<font color='red'>" .. 
+		translate("Fill in the ports you don't want to be forwarded by the agent, with the highest priority.") ..
+	"</font>")
+o:value("", translate("Use global config") .. "(" .. UDP_NO_REDIR_PORTS .. ")")
+o:value("disable", translate("No patterns are used"))
+o:value("1:65535", translate("All"))
+o.validate = port_validate
+
+o = s:option(DummyValue, "_hide_node_option", "")
+o.template = "passwall/cbi/hidevalue"
+o.value = "1"
+o:depends({ tcp_no_redir_ports = "1:65535", udp_no_redir_ports = "1:65535" })
+if TCP_NO_REDIR_PORTS == "1:65535" and UDP_NO_REDIR_PORTS == "1:65535" then
+	o:depends({ tcp_no_redir_ports = "", udp_no_redir_ports = "" })
+end
+
+o = s:option(Flag, "use_global_config", translatef("Use global config"))
+o.default = "0"
+o.rmempty = false
+o:depends({ _hide_node_option = "1",  ['!reverse'] = true })
+
+o = s:option(ListValue, "tcp_node", "<a style='color: red'>" .. translate("TCP Node") .. "</a>")
+o.default = ""
+o:depends({ _hide_node_option = false, use_global_config = false })
+o.template = appname .. "/cbi/nodes_listvalue"
+o.group = {}
+o.remove = function(self, section)
+	m:del(section, self.option)
+	m:del(section, "udp_node")
+end
+
+o = s:option(DummyValue, "_tcp_node_bool", "")
+o.template = "passwall/cbi/hidevalue"
+o.value = "1"
+o:depends({ tcp_node = "",  ['!reverse'] = true })
+
+o = s:option(ListValue, "udp_node", "<a style='color: red'>" .. translate("UDP Node") .. "</a>")
+o.default = ""
+o:value("", translate("Close"))
+o:value("tcp", translate("Same as the tcp node"))
+o:depends({ _tcp_node_bool = "1", _node_sel_other = "1" })
+o.template = appname .. "/cbi/nodes_listvalue"
+o.group = {"",""}
+o.remove = function(self, section)
+	local v = s.fields["shunt_udp_node"]:formvalue(section)
+	if not v then
+		return m:del(section, self.option)
+	end
+end
+
+o = s:option(ListValue, "shunt_udp_node", "<a style='color: red'>" .. translate("UDP Node") .. "</a>")
+o:value("close", translate("Close"))
+o:value("tcp", translate("Same as the tcp node"))
+o:depends({ _tcp_node_bool = "1", _node_sel_shunt = "1" })
+o.cfgvalue = function(self, section)
+	local v = m:get(section, "udp_node") or ""
+	if v == "" then v = "close" end
+	if v ~= "close" and v ~= "tcp" then v = "tcp" end
+	return v
+end
+o.write = function(self, section, value)
+	if value == "close" then value = "" end
+	return m:set(section, "udp_node", value)
+end
+
+o = s:option(DummyValue, "_udp_node_bool", "")
+o.template = "passwall/cbi/hidevalue"
+o.value = "1"
+o:depends({ udp_node = "",  ['!reverse'] = true })
+o:depends({ shunt_udp_node = "tcp" })
+
+---- TCP Proxy Drop Ports
+local TCP_PROXY_DROP_PORTS = m:get("@global_forwarding[0]", "tcp_proxy_drop_ports")
+o = s:option(Value, "tcp_proxy_drop_ports", translate("TCP Proxy Drop Ports"))
+o:value("", translate("Use global config") .. "(" .. TCP_PROXY_DROP_PORTS .. ")")
+o:value("disable", translate("No patterns are used"))
+o.validate = port_validate
+o:depends({ use_global_config = true })
+o:depends({ _tcp_node_bool = "1" })
+
+---- UDP Proxy Drop Ports
+local UDP_PROXY_DROP_PORTS = m:get("@global_forwarding[0]", "udp_proxy_drop_ports")
+o = s:option(Value, "udp_proxy_drop_ports", translate("UDP Proxy Drop Ports"))
+o:value("", translate("Use global config") .. "(" .. UDP_PROXY_DROP_PORTS .. ")")
+o:value("disable", translate("No patterns are used"))
+o:value("443", translate("QUIC"))
+o.validate = port_validate
+o:depends({ use_global_config = true })
+o:depends({ _tcp_node_bool = "1" })
+
+---- TCP Redir Ports
+local TCP_REDIR_PORTS = m:get("@global_forwarding[0]", "tcp_redir_ports")
+o = s:option(Value, "tcp_redir_ports", translate("TCP Redir Ports"), translatef("Only work with using the %s node.", "TCP"))
+o:value("", translate("Use global config") .. "(" .. TCP_REDIR_PORTS .. ")")
+o:value("1:65535", translate("All"))
+o:value("80,443", "80,443")
+o:value("80:65535", "80 " .. translate("or more"))
+o:value("1:443", "443 " .. translate("or less"))
+o.validate = port_validate
+o:depends({ use_global_config = true })
+o:depends({ _tcp_node_bool = "1" })
+
+---- UDP Redir Ports
+local UDP_REDIR_PORTS = m:get("@global_forwarding[0]", "udp_redir_ports")
+
+========== acl_lua ==========
+o = s:option(Value, "udp_redir_ports", translate("UDP Redir Ports"), translatef("Only work with using the %s node.", "UDP"))
+o:value("", translate("Use global config") .. "(" .. UDP_REDIR_PORTS .. ")")
+o:value("1:65535", translate("All"))
+o:value("53", "53")
+o.validate = port_validate
+o:depends({ use_global_config = true })
+o:depends({ _udp_node_bool = "1" })
+
+o = s:option(DummyValue, "tips", "銆€")
+o.rawhtml = true
+---END---
+local api = require "luci.passwall.api"
+local appname = "passwall"
+local sys = api.sys
+
+m = Map(appname)
+api.set_apply_on_parse(m)
+
+s = m:section(TypedSection, "global", translate("ACLs"), "<font color='red'>" .. translate("ACLs is a tools which used to designate specific IP proxy mode.") .. "</font>")
+s.anonymous = true
+
+o = s:option(Flag, "acl_enable", translate("Main switch"))
+o.rmempty = false
+o.default = false
+
+-- [[ ACLs Settings ]]--
+s = m:section(TypedSection, "acl_rule")
+s.template = "cbi/tblsection"
+s.sortable = true
+s.anonymous = true
+s.addremove = true
+s.extedit = api.url("acl_config", "%s")
+function s.create(e, t)
+	t = TypedSection.create(e, t)
+	luci.http.redirect(e.extedit:format(t))
+end
+function s.remove(e, t)
+	sys.call("rm -rf /tmp/etc/passwall_tmp/dns_" .. t .. "*")
+	TypedSection.remove(e, t)
+end
+
+---- Enable
+o = s:option(Flag, "enabled", translate("Enable"))
+o.default = 1
+o.rmempty = false
+
+---- Remarks
+o = s:option(Value, "remarks", translate("Remarks"))
+o.rmempty = true
+
+local mac_t = {}
+[exit=0 len_out=2677 len_err=0]
+
+========== rule_list_lua ==========
+sys.net.mac_hints(function(e, t)
+	mac_t[e] = {
+		ip = t,
+		mac = e
+	}
+end)
+
+o = s:option(DummyValue, "sources", translate("Source"))
+o.rawhtml = true
+o.cfgvalue = function(t, n)
+	local e = ''
+	local v = Value.cfgvalue(t, n) or '-'
+	string.gsub(v, '[^' .. " " .. ']+', function(w)
+		local a = w
+		if mac_t[w] then
+			a = a .. ' (' .. mac_t[w].ip .. ')'
+		end
+		if #e > 0 then
+			e = e .. "<br />"
+		end
+		e = e .. a
+	end)
+	return e
+end
+
+o = s:option(DummyValue, "interface", translate("Source Interface"))
+o.cfgvalue = function(t, n)
+	local v = Value.cfgvalue(t, n) or '-'
+	return v
+end
+
+--[[
+---- TCP No Redir Ports
+o = s:option(Value, "tcp_no_redir_ports", translate("TCP No Redir Ports"))
+o.default = "default"
+o:value("disable", translate("No patterns are used"))
+o:value("default", translate("Default"))
+o:value("1:65535", translate("All"))
+
+---- UDP No Redir Ports
+o = s:option(Value, "udp_no_redir_ports", translate("UDP No Redir Ports"))
+o.default = "default"
+o:value("disable", translate("No patterns are used"))
+o:value("default", translate("Default"))
+o:value("1:65535", translate("All"))
+
+---- TCP Redir Ports
+o = s:option(Value, "tcp_redir_ports", translate("TCP Redir Ports"))
+o.default = "default"
+o:value("default", translate("Default"))
+o:value("1:65535", translate("All"))
+o:value("80,443", "80,443")
+o:value("80:65535", "80 " .. translate("or more"))
+o:value("1:443", "443 " .. translate("or less"))
+
+---- UDP Redir Ports
+o = s:option(Value, "udp_redir_ports", translate("UDP Redir Ports"))
+o.default = "default"
+o:value("default", translate("Default"))
+o:value("1:65535", translate("All"))
+o:value("53", "53")
+]]--
+
+return m
+---END---
+[exit=0 len_out=418 len_err=0]
+
+========== rule_list_config_relation ==========
+rule.lua
+rule_list.lua
+shunt_rules.lua
+---
+block_host
+block_ip
+chnlist
+chnroute
+chnroute6
+direct_host
+direct_ip
+domains_excluded
+gfwlist
+lanlist_ipv4
+lanlist_ipv6
+proxy_host
+proxy_ip
+---
+0.0.0.0/8
+10.0.0.0/8
+100.64.0.0/10
+127.0.0.0/8
+169.254.0.0/16
+172.16.0.0/12
+192.0.0.0/24
+192.0.2.0/24
+192.88.99.0/24
+192.168.0.0/16
+198.51.100.0/24
+203.0.113.0/24
+224.0.0.0/4
+233.252.0.0/24
+240.0.0.0/4
+255.255.255.255/32
+---END---
+passwall.@global[0].chn_list='proxy'
+[exit=0 len_out=1979 len_err=0]
+passwall.@global_rules[0].chnlist_update='1'
+
+passwall.@global_rules[0].gfwlist_update='1'
+========== file_exec_test_short ==========
+passwall.@global_rules[0].gfwlist_url='https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/gfw.txt'
+passwall.@global_rules[0].chnroute_url='https://ispip.clang.cn/all_cn.txt' 'https://fastly.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china.txt'
+passwall.@global_rules[0].chnroute6_url='https://ispip.clang.cn/all_cn_ipv6.txt' 'https://fastly.jsdelivr.net/gh/gaoyifan/china-operator-ip@ip-lists/china6.txt'
+passwall.@global_rules[0].chnlist_url='https://fastly.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/accelerated-domains.china.conf' 'https://fastly.jsdelivr.net/gh/felixonmars/dnsmasq-china-list/apple.china.conf'
+passwall.DirectGame.domain_list='regexp:\.cm.steampowered.com$
+passwall.DirectGame.ip_list='103.10.124.0/24
+passwall.ProxyGame.domain_list='geosite:category-games
+passwall.AIGC.domain_list='geosite:category-ai-chat-!cn
+passwall.Streaming.domain_list='geosite:netflix
+passwall.Proxy.domain_list='geosite:geolocation-!cn'
+passwall.Proxy.ip_list='149.154.160.0/20
+passwall.Direct.domain_list='geosite:cn'
+passwall.Direct.ip_list='223.5.5.5/32
+passwall.@subscribe_list[0]=subscribe_list
+passwall.@subscribe_list[0].remark='big99'
+passwall.@subscribe_list[0].url='http://ny9s.com/picupdate/E2tt.txt'
+passwall.@subscribe_list[0].allowInsecure='0'
+passwall.@subscribe_list[0].filter_keyword_mode='5'
+passwall.@subscribe_list[0].ss_type='global'
+passwall.@subscribe_list[0].trojan_type='global'
+passwall.@subscribe_list[0].vmess_type='global'
+passwall.@subscribe_list[0].vless_type='global'
+passwall.@subscribe_list[0].domain_strategy='global'
+passwall.@subscribe_list[0].auto_update='0'
+passwall.@subscribe_list[0].user_agent='v2rayN/9.99'
+passwall.@subscribe_list[0].remarks='澶у摜鐢ㄧ殑璁㈤槄'
+passwall.@subscribe_list[0].md5='055ad7173c011283e9832db89a1814bd'
+passwall.@acl_rule[0].chn_list='direct'
+---END---
+hello
+passwall.cfg013fd6.acl_enable='1'
+done
+[exit=0 len_out=45 len_err=0]
+
+========== file_exec_test_uci_add ==========
+TIMING
+1780402201
+SEC=cfg1d30ec
+1780402201
+OK
+[exit=0 len_out=46 len_err=0]

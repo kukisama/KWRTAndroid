@@ -37,11 +37,11 @@ export default async function mount(root, ctx) {
       const patch = {};
       for (const [k] of FIELDS) patch[k] = inputs[k].value;
       try { await api.patchSection(ctx.config, name, patch); toast("已保存"); await ctx.refreshAndRedraw(); }
-      catch (e) { toast(formatError(e), "warn"); }
+      catch (e) { toast("操作失败", "warn", { detail: formatError(e) }); }
     } }, "保存"),
     el("button", { class: "ghost", tip: "调用 rule_update.lua 立即下载并更新规则文件", onclick: async () => {
       try { const out = await api.updateRules(ctx.config); toast("已触发：" + out.slice(0, 120)); }
-      catch (e) { toast(formatError(e), "warn"); }
+      catch (e) { toast("操作失败", "warn", { detail: formatError(e) }); }
     } }, "立即更新规则"),
   ]));
 

@@ -56,12 +56,15 @@ impl LuciClient {
 
     pub async fn connect(opts: ConnectOptions) -> Result<Self> {
         let base = Self::build_base(&opts)?;
-        let timeout = Duration::from_secs(opts.timeout_secs.unwrap_or(10));
+        // 路由器侧 init.d reload / 长 shell 命令可能跑十几秒；给宽松超时。
+        let timeout = Duration::from_secs(opts.timeout_secs.unwrap_or(60));
 
         let mut builder = Client::builder()
             .cookie_store(true)
             .timeout(timeout)
             .connect_timeout(Duration::from_secs(5))
+            // 路由器一般在 LAN，禁用系统代理，避免被本机 HTTP 代理拦截后超时/失败。
+            .no_proxy()
             .user_agent("KWRT-Controller/0.1");
         if opts.accept_invalid_certs {
             builder = builder.danger_accept_invalid_certs(true);
@@ -359,6 +362,25 @@ impl LuciClient {
             json!({ "command": command, "params": params }),
         )
         .await
+    }
+
+    /// 把一段 shell 脚本交给路由器执行，等价于 `sh -c "<script>"`。
+    /// 返回 (code, stdout, stderr)；code != 0 时返回 Err，stderr 拼到 message 里。
+    pub async fn shell(&self, script: &str) -> Result<(i64, String, String)> {
+        let v = self
+            .file_exec("sh", vec!["-c", script])
+            .await
+            .context("file.exec sh -c 失败（rpcd 可能禁用了 file.exec）")?;
+        let code = v.get("code").and_then(|x| x.as_i64()).unwrap_or(-1);
+        let stdout = v.get("stdout").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let stderr = v.get("stderr").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        if code != 0 {
+            return Err(anyhow!(
+                "shell 命令失败 exit={code}: {}",
+                if stderr.is_empty() { stdout.clone() } else { stderr.clone() }
+            ));
+        }
+        Ok((code, stdout, stderr))
     }
 
     pub async fn system_board(&self) -> Result<Value> {

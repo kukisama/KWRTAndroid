@@ -1,0 +1,10 @@
+<resources>
+    <!-- 真实主题在 Compose 里定义，这里给系统看的占位主题，让 splash 配色与首屏一致。 -->
+    <style name="Theme.KwrtController" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
+</resources>

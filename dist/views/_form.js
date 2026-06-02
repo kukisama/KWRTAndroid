@@ -1,5 +1,5 @@
 // 公用：受控的小型表单工具，每个控件都强制带 data-tip
-import { el } from "./dom.js";
+import { el } from "../dom.js";
 
 export function field(label, tip, control) {
   return el("label", { tip, class: "grow" }, [label, control]);

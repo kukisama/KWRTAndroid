@@ -60,8 +60,40 @@ Get-Process kwrt-controller -ErrorAction SilentlyContinue | ForEach-Object {
     $_ | Stop-Process -Force
 }
 
+# 1.5 清掉 WebView2 用户数据目录，杜绝 index.html / app.js 被旧版缓存死。
+# 不删整个 user data，只删浏览器缓存子目录，保留 localStorage（记住的表单偏好）。
+$UserData = "$env:LOCALAPPDATA\io.kwrt.controller\EBWebView"
+if (Test-Path $UserData) {
+    Start-Sleep -Milliseconds 300
+    $cacheDirs = @(
+        "$UserData\Default\Cache",
+        "$UserData\Default\Code Cache",
+        "$UserData\Default\Service Worker",
+        "$UserData\Default\GPUCache"
+    )
+    foreach ($c in $cacheDirs) {
+        if (Test-Path $c) {
+            try { Remove-Item $c -Recurse -Force -ErrorAction Stop; Write-Host "==> cleared cache: $c" }
+            catch { Write-Host "==> WARN clear cache failed: $c -> $($_.Exception.Message)" -ForegroundColor Yellow }
+        }
+    }
+}
+
 # 2. 编译
-if (-not $NoBuild) {
+# 注意：Tauri 编译时把 dist/ 嵌入到 exe，所以 dist 改了必须重 cargo build。
+# 即便用户传了 -NoBuild，只要 dist 比 exe 新，也强制重编一次，避免再次踩坑。
+$Exe = Join-Path $SrcTauri 'target\debug\kwrt-controller.exe'
+$Dist = Join-Path $RepoRoot 'dist'
+$forceBuild = $false
+if ($NoBuild -and (Test-Path $Exe) -and (Test-Path $Dist)) {
+    $exeTime = (Get-Item $Exe).LastWriteTime
+    $newest = Get-ChildItem $Dist -Recurse -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($newest -and $newest.LastWriteTime -gt $exeTime) {
+        Write-Host "==> dist 比 exe 新（$($newest.FullName)）, 忽略 -NoBuild 强制重新编译" -ForegroundColor Yellow
+        $forceBuild = $true
+    }
+}
+if ((-not $NoBuild) -or $forceBuild) {
     Push-Location $SrcTauri
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
@@ -90,7 +122,6 @@ if (-not $NoBuild) {
     }
 }
 
-$Exe = Join-Path $SrcTauri 'target\debug\kwrt-controller.exe'
 if (-not (Test-Path $Exe)) { throw "未找到 debug 产物 $Exe" }
 Write-Host ("==> exe = {0} ({1:N1} MB)" -f $Exe, ((Get-Item $Exe).Length/1MB))
 

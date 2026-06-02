@@ -44,7 +44,7 @@ export default async function mount(root, ctx) {
             dns_shunt: shuntSel.value, filter_proxy_ipv6: v6Sel.value,
           });
           toast("DNS 设置已保存"); await ctx.refreshAndRedraw();
-        } catch (e) { toast(formatError(e), "warn"); }
+        } catch (e) { toast("操作失败", "warn", { detail: formatError(e) }); }
       } }, "保存并应用"),
     ]),
   );

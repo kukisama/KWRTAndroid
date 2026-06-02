@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use base64::Engine;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value};
 use url::Url;
 
 /// 解析入口：根据 scheme 分派。

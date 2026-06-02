@@ -76,7 +76,14 @@ code, .mono { font-family: ui-monospace, Consolas, "Courier New", monospace; }
   position: sticky; top: 0; z-index: 10;
 }
 .topbar .brand { font-weight: 600; letter-spacing: 0.3px; }
-.topbar .status { color: var(--muted); flex: 1; font-size: 12px; }
+.topbar .status { color: var(--muted); font-size: 12px; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-actions { display: inline-flex; align-items: center; gap: 6px; }
+.topbar-actions[hidden] { display: none; }
+.topbar-actions .icon-btn { width: auto; height: 30px; padding: 0 10px; font-size: 12px; }
+.icon-btn.primary { background: var(--primary); border-color: var(--primary); color: white; }
+.icon-btn.primary:hover { background: var(--primary-2); border-color: var(--primary-2); color: white; }
+.icon-btn.danger { color: var(--bad); border-color: var(--bad); }
+.icon-btn.danger:hover { color: white; background: var(--bad); }
 .icon-btn {
   background: transparent; border: 1px solid var(--line); color: var(--text);
   width: 32px; height: 32px; border-radius: 6px; cursor: pointer;
@@ -84,9 +91,11 @@ code, .mono { font-family: ui-monospace, Consolas, "Courier New", monospace; }
   font-size: 16px; line-height: 1; padding: 0;
 }
 .icon-btn:hover { border-color: var(--primary); color: var(--primary); }
+.icon-btn[hidden] { display: none; }
 
 /* ---------- view ---------- */
 .view { padding: 14px 16px 60px; max-width: 1180px; margin: 0 auto; }
+[hidden] { display: none !important; }
 h2, h3, h4 { margin: 6px 0 10px; }
 .hint { color: var(--muted); font-size: 13px; }
 .small { font-size: 12px; }
@@ -116,15 +125,32 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--primary); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
-button.primary { background: var(--primary); border-color: var(--primary); color: white; }
-button.primary:hover:not(:disabled) { background: var(--primary-2); border-color: var(--primary-2); }
+button.ghost { background: transparent; }
 button.danger { background: transparent; border-color: var(--bad); color: var(--bad); }
 button.danger.ghost { background: transparent; }
-button.ghost { background: transparent; }
+/* 把 .primary 放到 .ghost / .danger 之后，避免某些位置同时挂两个类时被透明背景覆盖
+   出现"白底白字看不见"问题（旧顺序就掉过这个坑） */
+button.primary { background: var(--primary); border-color: var(--primary); color: white; }
+button.primary:hover:not(:disabled) { background: var(--primary-2); border-color: var(--primary-2); }
 
 /* ---------- banner / checks ---------- */
 .banner { padding: 10px 12px; border-radius: 6px; background: rgba(31,138,58,0.12); color: var(--ok); border: 1px solid rgba(31,138,58,0.4); margin-bottom: 8px; }
 .banner.bad { background: rgba(192,57,43,0.12); color: var(--bad); border-color: rgba(192,57,43,0.4); }
+.dirty-indicator { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; margin-right: 6px;
+  font-size: 12px; color: #b25600; background: rgba(255, 165, 0, 0.15); border: 1px solid rgba(255, 165, 0, 0.5);
+  border-radius: 10px; white-space: nowrap; cursor: help; }
+.banner-compact { padding: 6px 10px; font-size: 12px; margin: 8px 16px 0; }
+.dirty-popover {
+  position: fixed; z-index: 9999; max-width: 520px; max-height: 60vh; overflow: auto;
+  background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25); padding: 10px 12px; font-size: 12px;
+  font-family: ui-monospace, Consolas, monospace; color: var(--text);
+}
+.dirty-popover .dp-head { font-weight: 600; margin-bottom: 6px; color: #b25600; font-family: inherit; }
+.dirty-popover .dp-line { white-space: pre-wrap; word-break: break-all; padding: 2px 0; border-bottom: 1px dashed var(--line); }
+.dirty-popover .dp-line:last-of-type { border-bottom: 0; }
+.dirty-popover .dp-foot { margin-top: 8px; color: var(--muted); font-family: inherit; font-size: 11px; }
+.dirty-popover .dp-empty { color: var(--muted); }
 .checks-list { list-style: none; padding: 0; margin: 8px 0; }
 .checks-list li { display: grid; grid-template-columns: 24px 220px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
 .checks-list li:last-child { border-bottom: 0; }
@@ -173,3 +199,74 @@ table.grid tr.current td { background: var(--current-row); }
 
 /* ---------- 日志 ---------- */
 .log-pane { background: var(--pane-bg); color: var(--pane-text); border: 1px solid var(--line); border-radius: 6px; padding: 10px; max-height: 60vh; overflow: auto; white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+
+/* node test latency badges */
+.badge-ok   { color:#0a8a3a; font-weight:600; }
+.badge-warn { color:#b07000; font-weight:600; }
+.badge-bad  { color:#b21f1f; font-weight:600; }
+
+/* nodes 列紧凑测试 UI */
+.test-toolbar { gap:6px; align-items:center; flex-wrap:wrap; }
+.test-toolbar select { padding:2px 6px; font-size:12px; }
+.test-toolbar .small { padding:2px 8px; font-size:12px; }
+.test-col { white-space:nowrap; }
+.test-line { display:flex; align-items:center; gap:4px; line-height:1.4; }
+.test-chip {
+  display:inline-block; width:18px; text-align:center;
+  font-size:11px; font-weight:600; cursor:pointer;
+  background:var(--bg-soft,#eef); color:var(--fg,#225);
+  border-radius:3px; user-select:none;
+}
+.test-chip:hover { background:#cce; }
+.chip-cell { font-size:12px; min-width:42px; display:inline-block; }
+.tag { display:inline-block; padding:0 5px; margin-right:2px; border-radius:3px; font-size:11px; font-weight:600; color:#fff; }
+.tag-tcp { background:#2566c8; }
+.tag-udp { background:#7a4fb5; }
+.op-col button { padding:2px 8px !important; font-size:12px; margin-right:3px !important; }
+
+/* ---------- 硬件总览 / 直连表 ---------- */
+table.sys-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.sys-table th, table.sys-table td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: middle; }
+table.sys-table th { color: var(--muted); font-weight: 500; background: var(--card-2); }
+.usage-bar { position: relative; height: 16px; background: var(--card-2); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.usage-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; transition: width .2s; }
+.usage-bar-label { position: absolute; left: 0; right: 0; top: 0; bottom: 0; text-align: center; font-size: 11px; line-height: 16px; color: var(--text); mix-blend-mode: difference; }
+.pill { display: inline-block; padding: 1px 8px; font-size: 11px; border-radius: 10px; border: 1px solid var(--line); }
+.pill-ok { background: rgba(31,138,58,0.18); color: var(--ok); border-color: rgba(31,138,58,0.4); }
+.pill-muted { background: var(--card-2); color: var(--muted); }
+.pill-warn { background: rgba(217,138,11,0.18); color: #d98a0b; border-color: rgba(217,138,11,0.5); font-weight: 600; }
+table.direct-table tr.row-disabled td input { opacity: 0.55; }
+table.direct-table tr.row-disabled td { background: rgba(128,128,128,0.06); }
+.sys-table tr.row-disabled td { background: rgba(128,128,128,0.06); color: var(--muted); }
+
+/* 通用模态卡 */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.modal-card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; box-shadow: 0 10px 32px rgba(0,0,0,0.25); }
+.modal-card h3 { margin: 0 0 12px; }
+button.small { padding: 2px 8px; font-size: 12px; }
+.switch { position: relative; display: inline-block; width: 36px; height: 18px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-slider { position: absolute; cursor: pointer; inset: 0; background: #888; border-radius: 18px; transition: .15s; }
+.switch-slider::before { position: absolute; content: ''; height: 14px; width: 14px; left: 2px; top: 2px; background: white; border-radius: 50%; transition: .15s; }
+.switch input:checked + .switch-slider { background: var(--primary); }
+.switch input:checked + .switch-slider::before { transform: translateX(18px); }
+
+
+/* ---------- 登录卡片（居中瘦版） ---------- */
+.view-login { display: flex; justify-content: center; padding-top: 32px; }
+.login-card { width: 100%; max-width: 380px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+.login-card h2 { margin: 0 0 16px; font-size: 18px; text-align: center; }
+.login-card form { display: flex; flex-direction: column; gap: 12px; }
+.login-card label.stack { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.login-card label.stack input, .login-card label.stack select { width: 100%; box-sizing: border-box; }
+.login-card label.inline { display: flex; flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+.login-card .row.actions { display: flex; gap: 8px; margin-top: 6px; }
+.login-card .row.actions button { flex: 1; }
+
+/* ---------- topbar 防溢出 + 方形 icon ---------- */
+.topbar { flex-wrap: wrap; row-gap: 6px; }
+.topbar-actions { flex-wrap: wrap; }
+.icon-btn-square { width: 32px; height: 32px; padding: 0; font-size: 16px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.icon-btn.danger { color: var(--bad); border-color: var(--bad); background: transparent; }
+.icon-btn.danger:hover { color: white; background: var(--bad); border-color: var(--bad); }
+

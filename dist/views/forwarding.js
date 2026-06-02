@@ -46,7 +46,7 @@ export default async function mount(root, ctx) {
             tcp_proxy_way: tcpWaySel.value,
           });
           toast("已保存"); await ctx.refreshAndRedraw();
-        } catch (e) { toast(formatError(e), "warn"); }
+        } catch (e) { toast("操作失败", "warn", { detail: formatError(e) }); }
       } }, "保存并应用"),
     ]),
   );

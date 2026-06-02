@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     KWRT Controller 一键打包脚本（仅生成 exe，不打 MSI/NSIS）。
 

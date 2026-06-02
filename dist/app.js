@@ -5,6 +5,8 @@ import { api, formatError } from "./api.js";
 import { register, renderTabBar, refreshCurrent } from "./tabs.js";
 import { bindThemeButton } from "./theme.js";
 
+window.__dbg && window.__dbg("app.js module top reached");
+
 import mountDashboard from "./views/dashboard.js";
 import mountNodes from "./views/nodes.js";
 import mountShunt from "./views/shunt.js";
@@ -38,18 +40,24 @@ const ctx = {
 // 注册所有 tab。文案 + 提示都是中文。
 register("dashboard", "总览", mountDashboard, "主开关、当前 TCP/UDP 节点、运行状态一览");
 register("nodes", "节点", mountNodes, "查看 / 设为出口 / 删除 / 导入链接（vless/vmess/hy2/trojan/ss）");
-register("shunt", "分流", mountShunt, "按域名 / IP 段把流量分到不同节点，对应 PassWall 的"分流"页");
+register("shunt", "分流", mountShunt, "按域名 / IP 段把流量分到不同节点，对应 PassWall 的『分流』页");
 register("subscribe", "订阅", mountSubscribe, "管理订阅链接并立即更新节点池");
 register("dns", "DNS", mountDns, "DNS 模式 / 远程 DNS / 是否过滤 IPv6 等");
 register("rules", "规则源", mountRules, "GFWList / ChnRoute / 中国域名表等规则的更新与源");
 register("forwarding", "端口/转发", mountForwarding, "TCP/UDP 重定向端口、丢弃端口、转发方式");
-register("direct", "直连列表", mountDirect, "PassWall 直连出局的 IP / 域名清单（即原"加入直连"功能）");
+register("direct", "直连列表", mountDirect, "PassWall 直连出局的 IP / 域名清单（即原『加入直连』功能）");
 register("log", "日志", mountLog, "实时查看 PassWall 运行日志");
 register("backup", "备份/恢复", mountBackup, "导出 / 导入 /etc/config/passwall 整个配置文件");
 register("raw", "原始配置", mountRaw, "展开后能看到 22 个 section 全部原始字段，遇到 UI 没覆盖的设置就来这里");
 
 // ───── 启动流程 ─────
-window.addEventListener("DOMContentLoaded", async () => {
+// 注意：本文件以 <script type="module"> 加载，等价于 defer，
+// 执行时 DOMContentLoaded 可能已经触发完，所以这里不要用 addEventListener("DOMContentLoaded")，
+// 直接立即初始化即可（body 内的元素一定已经存在）。
+init();
+
+function init() {
+  window.__dbg && window.__dbg("init() running");
   bindThemeButton();
   // 全局错误捕获 -> toast + console，便于在 UI 上看到 JS 异常
   window.addEventListener("error", (e) => {
@@ -62,19 +70,42 @@ window.addEventListener("DOMContentLoaded", async () => {
   });
 
   const f = $("#form-login");
+  if (!f) {
+    console.error("找不到 #form-login，初始化失败");
+    return;
+  }
   const p = loadPrefs();
   if (p.host) f.host.value = p.host;
   if (p.scheme) f.scheme.value = p.scheme;
   if (p.port) f.port.value = p.port;
   if (p.username) f.username.value = p.username;
   if (p.accept_invalid_certs) f.accept_invalid_certs.checked = true;
-  if (p.remember) f.remember.checked = true;
-  if (p.remember && p.host && p.username) {
-    try {
-      const pwd = await api.loadPassword(p.host, p.username);
-      if (pwd) f.password.value = pwd;
-    } catch (e) { console.warn("load_saved_password failed", e); }
+  // remember 默认为勾选；只有用户上次显式取消才不勾
+  if (p.remember === false) f.remember.checked = false;
+  if (f.remember.checked && (p.host || f.host.value) && (p.username || f.username.value)) {
+    const h = p.host || f.host.value;
+    const u = p.username || f.username.value;
+    api.loadPassword(h, u).then((pwd) => {
+      if (pwd && !f.password.value) f.password.value = pwd;
+    }).catch((e) => console.warn("load_saved_password failed", e));
   }
+
+  // 输入即保存（不含密码），登录失败也不丢
+  const persistFields = ["host", "scheme", "port", "username", "accept_invalid_certs", "remember"];
+  persistFields.forEach((name) => {
+    const el = f.elements[name];
+    if (!el) return;
+    el.addEventListener("change", () => {
+      savePrefs({
+        host: f.host.value.trim(),
+        scheme: f.scheme.value,
+        port: f.port.value ? Number(f.port.value) : null,
+        username: f.username.value.trim(),
+        accept_invalid_certs: f.accept_invalid_certs.checked,
+        remember: f.remember.checked,
+      });
+    });
+  });
 
   f.addEventListener("submit", onLogin);
   $("#btn-forget").addEventListener("click", onForget);
@@ -83,7 +114,9 @@ window.addEventListener("DOMContentLoaded", async () => {
   $("#btn-refresh-all").addEventListener("click", onRefreshAll);
   $("#btn-reload").addEventListener("click", () => onService("reload"));
   $("#btn-restart").addEventListener("click", () => onService("restart"));
-});
+  console.log("[kwrt] init done");
+  window.__dbg && window.__dbg("init() done: submit handler bound");
+}
 
 function loadPrefs() {
   try { return JSON.parse(localStorage.getItem(PREF_KEY) || "{}"); } catch { return {}; }
