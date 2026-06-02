@@ -19,7 +19,25 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 全量优化 + 资源压缩，主要砍掉没用到的 material-icons-extended 图标
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            // 让 release 也能直接 install（不签名 install 不了）。release 正式发布请换成你自己的 keystore。
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    // 拆 ABI：每个架构一个 APK，体积再砍一刀（armeabi-v7a/arm64-v8a/x86_64 各自小很多）
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86_64")
+            isUniversalApk = true  // 同时保留一份通用包，便于直接装
         }
     }
 
