@@ -31,13 +31,13 @@ android {
         }
     }
 
-    // 拆 ABI：每个架构一个 APK，体积再砍一刀（armeabi-v7a/arm64-v8a/x86_64 各自小很多）
+    // 只编 arm64-v8a：目标手机都是 64 位 ARM，其它 ABI 浪费构建时间和空间。
     splits {
         abi {
             isEnable = true
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86_64")
-            isUniversalApk = true  // 同时保留一份通用包，便于直接装
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 

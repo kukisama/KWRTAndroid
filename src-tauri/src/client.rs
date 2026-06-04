@@ -1,5 +1,6 @@
-//! LuCI / ubus 客户端：表单登录拿 sysauth Cookie，并通过 /ubus 调用 RPC。
+//! LuCI / ubus 客户端：仅走 ubus 登录，拿到 session 后直接作为 sysauth cookie 注入。
 use anyhow::{anyhow, Context, Result};
+use reqwest::cookie::Jar;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -59,8 +60,12 @@ impl LuciClient {
         // 路由器侧 init.d reload / 长 shell 命令可能跑十几秒；给宽松超时。
         let timeout = Duration::from_secs(opts.timeout_secs.unwrap_or(60));
 
+        // 自带一个可外部访问的 cookie jar，在 ubus 登录成功后手动注入 sysauth_http。
+        // （LuCI 控制器端点如 ping_node / urltest_node 依赖 sysauth cookie 鉴权。）
+        let jar: Arc<Jar> = Arc::new(Jar::default());
+
         let mut builder = Client::builder()
-            .cookie_store(true)
+            .cookie_provider(jar.clone())
             .timeout(timeout)
             .connect_timeout(Duration::from_secs(5))
             // 路由器一般在 LAN，禁用系统代理，避免被本机 HTTP 代理拦截后超时/失败。
@@ -72,91 +77,24 @@ impl LuciClient {
         let http = builder.build().context("构建 HTTP 客户端失败")?;
 
         let mut client = LuciClient {
-            base_url: base,
+            base_url: base.clone(),
             http,
             sysauth: None,
             ubus_session: None,
             username: opts.username.clone(),
         };
 
-        // 1) 先 ubus 登录（最稳；不依赖 LuCI 主题/表单字段）
+        // 只走 ubus 登录（最稳、最快；不依赖 LuCI 主题/表单字段）
         client.login_ubus(&opts.username, &opts.password).await?;
-        // 2) 再尝试 form login 拿 sysauth cookie（用于 WebView 直接访问 LuCI 页面）；
-        //    失败不阻断 —— 真正的业务调用全走 ubus。
-        if let Err(e) = client.login_form(&opts.username, &opts.password).await {
-            log::warn!("form login 失败（不影响 ubus 调用）：{e:#}");
+
+        // ubus 拿到的 session token 在 LuCI 看来就是 sysauth_http 的值，
+        // 直接注入 cookie jar，后续 http_ping / urltest_node 都能使用。
+        if let Some(sess) = &client.ubus_session {
+            let cookie = format!("sysauth_http={sess}; Path=/");
+            jar.add_cookie_str(&cookie, &base);
+            client.sysauth = Some(format!("sysauth_http={sess}"));
         }
         Ok(client)
-    }
-
-    async fn login_form(&mut self, user: &str, pass: &str) -> Result<()> {
-        let url = self.base_url.join("cgi-bin/luci/")?;
-        // 不同 LuCI 主题/版本字段名不同：
-        //   - 经典 LuCI:    luci_username / luci_password
-        //   - 新版 LuCI:    username / password
-        // 两套都试一遍，谁先拿到 sysauth 就用谁。
-        let candidates: [&[(&str, &str)]; 2] = [
-            &[("luci_username", user), ("luci_password", pass)],
-            &[("username", user), ("password", pass)],
-        ];
-
-        let mut last_status: Option<u16> = None;
-        let mut last_body_head: Option<String> = None;
-
-        for form in candidates.iter() {
-            log::debug!("form login POST {url} fields={:?}", form.iter().map(|(k,_)| k).collect::<Vec<_>>());
-            let resp = self
-                .http
-                .post(url.clone())
-                .form(form)
-                .send()
-                .await
-                .with_context(|| format!("无法访问 {url}（路由器是否可达？端口是否正确？）"))?;
-            let status = resp.status();
-            let cookies: Vec<(String, String)> = resp
-                .cookies()
-                .map(|c| (c.name().to_string(), c.value().to_string()))
-                .collect();
-            log::debug!("form login resp status={status} cookies={cookies:?} url={}", resp.url());
-
-            for (name, value) in &cookies {
-                if name.starts_with("sysauth") {
-                    self.sysauth = Some(format!("{name}={value}"));
-                    return Ok(());
-                }
-            }
-
-            last_status = Some(status.as_u16());
-            let body = resp.text().await.unwrap_or_default();
-            let head: String = body.chars().take(400).collect();
-            log::debug!("form login body head: {head}");
-            last_body_head = Some(head);
-
-            // 再拿一次根路径，看 cookie_store 是否在 302 之后才落
-            if let Ok(probe) = self.http.get(self.base_url.clone()).send().await {
-                for cookie in probe.cookies() {
-                    if cookie.name().starts_with("sysauth") {
-                        self.sysauth = Some(format!("{}={}", cookie.name(), cookie.value()));
-                        return Ok(());
-                    }
-                }
-            }
-        }
-
-        // 兜底：如果 ubus 已经登录成功，直接把 ubus session 当作 sysauth cookie 注入
-        if let Some(sess) = &self.ubus_session {
-            log::warn!("form login 没拿到 sysauth，用 ubus session 兜底注入 sysauth cookie");
-            self.sysauth = Some(format!("sysauth_http={sess}"));
-            return Ok(());
-        }
-
-        Err(anyhow!(
-            "表单登录失败：未拿到 sysauth Cookie（HTTP {status:?}，body 前 400 字: {body:?}）。\
-             可能原因：1) LuCI 表单字段名与本程序不匹配；2) 登录页要求 CSRF token；3) 账号/密码错误；\
-             4) 该 LuCI 主题禁用了表单登录。",
-            status = last_status,
-            body = last_body_head
-        ))
     }
 
     async fn login_ubus(&mut self, user: &str, pass: &str) -> Result<()> {

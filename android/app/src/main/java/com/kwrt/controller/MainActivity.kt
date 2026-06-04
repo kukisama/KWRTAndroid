@@ -19,9 +19,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.kwrt.controller.ui.screen.ClientsScreen
 import com.kwrt.controller.ui.screen.LoginScreen
+import com.kwrt.controller.ui.screen.LogsScreen
 import com.kwrt.controller.ui.theme.KwrtTheme
 import com.kwrt.controller.vm.AppViewModel
 import com.kwrt.controller.vm.Screen
+import com.kwrt.controller.vm.Tab
 
 class MainActivity : ComponentActivity() {
     private val vm: AppViewModel by viewModels()
@@ -29,6 +31,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
         setContent {
             KwrtTheme {
                 val state by vm.state.collectAsState()
@@ -48,7 +51,10 @@ class MainActivity : ComponentActivity() {
                 ) {
                     when (state.screen) {
                         Screen.Login -> LoginScreen(state, vm)
-                        Screen.Clients -> ClientsScreen(state, vm)
+                        Screen.Clients -> when (state.tab) {
+                            Tab.Clients -> ClientsScreen(state, vm)
+                            Tab.Logs -> LogsScreen(state, vm)
+                        }
                     }
                     SnackbarHost(
                         snackbarHostState,

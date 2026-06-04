@@ -6,8 +6,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.SignalWifiOff
+import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,14 +37,14 @@ fun ClientsScreen(state: UiState, vm: AppViewModel) {
                     Column {
                         Text("客户端开关", style = MaterialTheme.typography.titleLarge)
                         Text(
-                            "${state.creds.host} · ${state.creds.config}",
+                            state.creds.baseUrl(),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
                 actions = {
-                    IconButton(onClick = { vm.refresh() }, enabled = !state.loading) {
+                    IconButton(onClick = { vm.refresh(manual = true) }, enabled = !state.loading) {
                         Icon(Icons.Outlined.Refresh, "刷新")
                     }
                     IconButton(onClick = { vm.logout() }) {
@@ -52,43 +57,58 @@ fun ClientsScreen(state: UiState, vm: AppViewModel) {
                 ),
             )
         },
-        bottomBar = { BottomApplyBar(state, vm) },
+        bottomBar = {
+            Column {
+                BottomApplyBar(state, vm)
+                BottomNav(state.tab, vm::selectTab)
+            }
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { inner ->
-        Box(
-            Modifier
+        val pullState = rememberPullToRefreshState()
+        PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = { vm.refresh(manual = true) },
+            state = pullState,
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(inner),
         ) {
-            when {
-                state.loading && state.rows.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+            Column(Modifier.fillMaxSize()) {
+                when {
+                    state.networkDown -> {
+                        NetworkDownHint(vm)
                     }
-                }
-                state.rows.isEmpty() -> {
-                    EmptyHint()
-                }
-                else -> {
-                    LazyColumn(
-                        contentPadding = PaddingValues(
-                            start = 16.dp, end = 16.dp,
-                            top = 12.dp, bottom = 12.dp,
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        item {
-                            val total = state.rows.size
-                            val on = state.rows.count { it.enabled }
-                            Text(
-                                "共 $total 条，启用 $on 条" + if (state.pending) " · 有未应用改动" else "",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
-                            )
+                    state.loading && state.rows.isEmpty() -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
                         }
-                        items(state.rows, key = { it.section }) { row ->
-                            AclRowCard(row, onToggle = { vm.toggle(row.section) })
+                    }
+                    state.rows.isEmpty() -> {
+                        EmptyHint()
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(
+                                start = 16.dp, end = 16.dp,
+                                top = 12.dp, bottom = 12.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            item {
+                                val total = state.rows.size
+                                val on = state.rows.count { it.enabled }
+                                Text(
+                                    "共 $total 条，启用 $on 条" + if (state.pending) " · 有未应用改动" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+                                )
+                            }
+                            items(state.rows, key = { it.section }) { row ->
+                                AclRowCard(row, onToggle = { vm.toggle(row.section) })
+                            }
                         }
                     }
                 }
@@ -207,5 +227,49 @@ private fun EmptyHint() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/** 网络中断空态：清空列表，提示连接失败 + 打开 Wi-Fi 设置 + 重试。 */
+@Composable
+private fun NetworkDownHint(vm: AppViewModel) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(
+            Icons.Outlined.SignalWifiOff,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(56.dp),
+        )
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "连接路由器失败",
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "可能不在对应网络。请检查 Wi-Fi 后重试。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(20.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = { vm.openWifiSettings() }) {
+                Icon(Icons.Outlined.Wifi, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("打开 Wi-Fi 设置")
+            }
+            OutlinedButton(onClick = { vm.refresh(manual = true) }) {
+                Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("重试")
+            }
+        }
     }
 }

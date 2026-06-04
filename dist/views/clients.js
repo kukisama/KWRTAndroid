@@ -17,7 +17,18 @@ import { api, formatError } from "../api.js";
 export default async function mount(root, ctx) {
   let snap = { acl_enable: false, rules: [] };
   let pending = false;
-  let tbody, pendingBadge, applyBtn, refreshBtn, countEl;
+  let tbody, refreshBtn, applyBtn, pendingBadge, countEl;
+
+  function markPending() {
+    pending = true;
+    if (pendingBadge) pendingBadge.style.display = "";
+    if (applyBtn) applyBtn.disabled = false;
+  }
+  function clearPending() {
+    pending = false;
+    if (pendingBadge) pendingBadge.style.display = "none";
+    if (applyBtn) applyBtn.disabled = true;
+  }
 
   // 节点 id → 显示名映射，沿用 overview 数据，缺失就直接显示 id
   function nodeLabel(id) {
@@ -29,25 +40,14 @@ export default async function mount(root, ctx) {
       n.remarks || id);
   }
 
-  function markPending() {
-    pending = true;
-    if (pendingBadge) pendingBadge.hidden = false;
-  }
-  function clearPending() {
-    pending = false;
-    if (pendingBadge) pendingBadge.hidden = true;
-  }
-
   function enableBtn(r) {
-    // 视觉：on = 绿色实心 / off = 灰色幽灵；带 tip
+    // 视觉：on = 绿色实心 / off = 灰色幽灵；点即暂存，需后续「应用配置」reload PassWall
     const btn = el("button", {
       class: "pill-btn",
-      tip: r.enabled ? "点击停用此规则（暂存，不立即生效）" : "点击启用此规则（暂存，不立即生效）",
+      tip: r.enabled ? "点击停用此规则（暂存，需应用配置）" : "点击启用此规则（暂存，需应用配置）",
     });
     function paint() {
       btn.textContent = r.enabled ? "● 启用" : "○ 停用";
-      // 主题变量依赖 style.v4.css 定义：--ok / --card-2 / --line / --muted
-      // 避免写死色值，深色主题下也能自动反转
       btn.style.background = r.enabled ? "var(--ok)" : "var(--card-2)";
       btn.style.color = r.enabled ? "#fff" : "var(--muted)";
       btn.style.borderColor = r.enabled ? "var(--ok)" : "var(--line)";
@@ -65,8 +65,9 @@ export default async function mount(root, ctx) {
         const tr = btn.closest("tr");
         if (tr) tr.classList.toggle("row-disabled", !next);
         markPending();
+        toast(`✓ 已暂存：${next ? "启用" : "停用"} ${r.sources || r.remarks || r[".name"]}`);
       } catch (e) {
-        toast("切换启用失败", "warn", { detail: formatError(e) });
+        toast("切换失败", "warn", { detail: formatError(e) });
       } finally { btn.disabled = false; }
     });
     return btn;
@@ -107,28 +108,30 @@ export default async function mount(root, ctx) {
       return;
     }
     rerender();
+    clearPending();
   }
 
-  refreshBtn = el("button", { class: "ghost", tip: "重新从路由器拉取最新 ACL（不影响未应用的本地切换）" }, "↻ 刷新");
+  refreshBtn = el("button", { class: "ghost", tip: "重新从路由器拉取最新 ACL" }, "↻ 刷新");
   refreshBtn.addEventListener("click", async () => {
-    if (pending && !confirm("还有未应用的启用切换，刷新会拉到服务端最新状态，确认继续？")) return;
     refreshBtn.disabled = true;
-    try { await load(); clearPending(); } finally { refreshBtn.disabled = false; }
+    try { await load(); } finally { refreshBtn.disabled = false; }
   });
 
-  applyBtn = el("button", { class: "primary", tip: "把上面那些启用/停用切换实际应用到 PassWall（后台 reload，约 10–30 秒生效）" }, "✓ 应用配置");
+  applyBtn = el("button", { class: "primary", tip: "把刚才暂存的启用/停用 reload 到 PassWall" }, "✓ 应用配置");
+  applyBtn.disabled = true;
   applyBtn.addEventListener("click", async () => {
-    applyBtn.disabled = true; const old = applyBtn.textContent; applyBtn.textContent = "应用中…";
+    applyBtn.disabled = true;
     try {
       await api.aclReload(ctx.config);
       clearPending();
       toast("✓ 已触发后台 reload PassWall（约 10–30 秒生效）");
     } catch (e) {
-      toast("应用配置失败", "warn", { detail: formatError(e) });
-    } finally { applyBtn.disabled = false; applyBtn.textContent = old; }
+      toast("reload 失败", "warn", { detail: formatError(e) });
+      applyBtn.disabled = false;
+    }
   });
 
-  pendingBadge = el("span", { class: "pill pill-warn", hidden: true, style: { marginLeft: "6px" } }, "有未应用改动");
+  pendingBadge = el("span", { class: "badge warn", style: { display: "none" } }, "有未应用改动");
   countEl = el("span", { class: "mono small muted" }, "—");
 
   tbody = el("tbody", {});
@@ -147,15 +150,15 @@ export default async function mount(root, ctx) {
     el("section", { class: "card" }, [
       el("h3", {}, "客户端例外 · 快捷开关"),
       el("p", { class: "hint" }, [
-        "只用来快速 ", el("b", {}, "启用 / 停用"), " 已有 ACL 规则，不编辑也不删除。",
-        "新增 / 修改字段请去 ", el("b", {}, "「客户端例外」"), " 完整页。",
+        "只用来快速 启用 / 停用 已有 ACL 规则。改完点 ", el("b", {}, "应用配置"),
+        " 才会下发到 PassWall。新增 / 修改字段请去 ", el("b", {}, "「客户端例外」"), " 完整页。",
       ]),
       el("div", { class: "row" }, [
         refreshBtn,
+        applyBtn,
+        pendingBadge,
         el("span", { class: "grow" }),
         countEl,
-        pendingBadge,
-        applyBtn,
       ]),
       table,
     ]),

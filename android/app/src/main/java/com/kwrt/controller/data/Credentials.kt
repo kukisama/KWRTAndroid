@@ -14,12 +14,44 @@ data class Credentials(
     val username: String = "root",
     val password: String = "",
     val config: String = "passwall",
+    /** 首次成功登录时记录的 Wi-Fi SSID；后续自动登录会检测当前 SSID 是否匹配。 */
+    val wifiSsid: String? = null,
 ) {
     fun isValid(): Boolean = host.isNotBlank() && username.isNotBlank()
 
     fun baseUrl(): String {
-        val p = port?.let { ":$it" } ?: ""
-        return "$scheme://${host.trim()}$p"
+        val n = normalized()
+        val p = n.port?.let { ":$it" } ?: ""
+        return "${n.scheme}://${n.host}$p"
+    }
+
+    /**
+     * 从用户输入的 host 智能解析 scheme/host/port：
+     *  - 包含 `https://` 前缀 → https
+     *  - 否则一律 http（与 PC 版一致；想用 https 就在地址里明写）
+     *  - host 中带 `:port` 会被提取，否则按 scheme 默认 80 / 443
+     */
+    fun normalized(): Credentials {
+        var raw = host.trim()
+        var sch = "http"
+        if (raw.startsWith("https://", ignoreCase = true)) {
+            sch = "https"
+            raw = raw.substring(8)
+        } else if (raw.startsWith("http://", ignoreCase = true)) {
+            raw = raw.substring(7)
+        }
+        raw = raw.trimEnd('/')
+        var h = raw
+        var p: Int? = port
+        val colon = raw.lastIndexOf(':')
+        // 防止 IPv6 误判（IPv6 多冒号，简单处理：仅当 host 不含 '[' 时才剥端口）
+        if (colon > 0 && !raw.contains('[')) {
+            raw.substring(colon + 1).toIntOrNull()?.let {
+                h = raw.substring(0, colon)
+                p = it
+            }
+        }
+        return copy(scheme = sch, host = h, port = p)
     }
 }
 
@@ -36,6 +68,7 @@ class CredentialStore(ctx: Context) {
             username = sp.getString("username", "root") ?: "root",
             password = sp.getString("password", "") ?: "",
             config = sp.getString("config", "passwall") ?: "passwall",
+            wifiSsid = sp.getString("wifi_ssid", null),
         )
     }
 
@@ -50,6 +83,9 @@ class CredentialStore(ctx: Context) {
             .putString("username", c.username)
             .putString("password", c.password)
             .putString("config", c.config)
+            .apply {
+                if (c.wifiSsid != null) putString("wifi_ssid", c.wifiSsid) else remove("wifi_ssid")
+            }
             .apply()
     }
 

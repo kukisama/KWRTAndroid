@@ -109,7 +109,7 @@ export default async function mount(root, ctx) {
     return f ? f.label : (id || "-");
   }
 
-  // 行内 enabled 列：点一下即写 UCI（不 reload），等用户点"应用配置"统一生效
+  // 行内 enabled 列：暂存 uci，点「应用配置」时一次性 reload
   function makeRowToggle(r) {
     const cb = el("input", { type: "checkbox" });
     cb.checked = !!r.enabled;
@@ -119,11 +119,10 @@ export default async function mount(root, ctx) {
       try {
         await api.aclUpdate(ctx.config, { ...r, enabled: on });
         r.enabled = on;
-        // 更新行 class
         const tr = cb.closest("tr");
         if (tr) tr.classList.toggle("row-disabled", !on);
         markPending();
-        toast(on ? `✓ 已暂存：启用 ${r.sources}` : `✓ 已暂存：停用 ${r.sources}`);
+        toast(`✓ 已暂存：${on ? "启用" : "停用"} ${r.sources || r.remarks || r[".name"]}`);
       } catch (err) {
         cb.checked = !on;
         toast("切换启用失败", "warn", { detail: formatError(err) });
