@@ -1,49 +1,100 @@
-# KWRT Controller (Windows · Tauri 2 + Rust)
+# 🎛️ KWRT Controller
 
-> 基于 PassWall 的快速控制器。详细可行性分析见 [调研-Windows端可行性.md](调研-Windows端可行性.md)。
+> 给路由器装一个**ACL 速控面板** —— 谁走代理、谁直连，两秒搞定 ✨
+> 跨 Windows / Android 双端，再也不用打开那个慢吞吞的路由器 Web 后台 🐌
 
-## 编译
+---
 
-```pwsh
-cd src-tauri
-cargo build --release
-```
+## 🤔 这是个什么东西
 
-产物：`src-tauri/target/release/kwrt-controller.exe`（无 MSI/NSIS）。
+家里挂着 KWRT + PassWall 的小伙伴一定懂这种崩溃 😩：
 
-## 运行
+- 📺 智能电视/扫地机/智能音箱 → 走代理就抽风
+- 🎮 PS/Switch 联机 → 必须走直连
+- 💼 临时下个大文件、连个国内服务 → 也想直连
+- 👯 来了客人，要把他手机临时拉进白名单
 
-直接双击 exe，或：
+按理说 PassWall 的"访问控制 (ACL)"就是干这个的。**问题是**：
 
-```pwsh
-Start-Process .\src-tauri\target\release\kwrt-controller.exe
-```
+- 路由器 Web 后台慢到怀疑人生 🐢
+- 改完一条规则点保存 → **等！30 到 60 秒！** ⏳
+- 手机上点 LuCI？放大缩小找按钮，体验地狱级 📱💀
 
-## 功能
+所以做了这个小工具 🛠️ —— **只干一件事：让你两秒钟改完一条 ACL，把设备放行或拉回**。
 
-- 表单登录 + ubus session.login 双通道认证
-- 登录后自动诊断：
-  - 系统信息（hostname / OpenWrt release）
-  - 列出全部 UCI 配置
-  - 识别 **PassWall v1 / v2 / Both / 无**
-  - 探测直连列表文件 (`/usr/share/passwall[2]/rules/direct_ip` 等)
-  - 检测 init 脚本是否注册（`rc.list`）
-  - 试读直连列表，统计条目数
-- 快捷动作：
-  - 加入 IP / CIDR / 域名到直连列表（去重 + 字符白名单）
-  - 删除单条
-  - reload / restart PassWall
-- 凭据保存：勾选"记住密码"后写入 **Windows 凭据管理器**（keyring crate，DPAPI）；不会写入任何明文文件
-- 自签 HTTPS：默认拒绝；用户主动勾选后才放行
+---
 
-## 安全
+## ✨ 核心能力（双端共有）
 
-- HTTP 客户端走 Rust 端（绕开 WebView CORS）
-- 默认拒绝无效证书；凭据加密存储；删除按钮一键擦除
-- 写入直连列表前对条目做字符白名单校验，仅允许 `[a-zA-Z0-9._:/-]`
-- 重启 / 重载 PassWall 等高风险动作有二次确认
+- 🔐 一键登录路由器（密码走系统安全存储，永不落地）
+- 🟢 ACL 总开关：一键全开 / 全关
+- ➕➖ ACL 规则增删改：支持 **IP / CIDR / IP 范围 / MAC / ipset**
+- 🎯 每条规则可单独配 TCP / UDP 节点、不转发端口、全局列表开关
+- 🚀 改完后台异步生效，UI 不卡顿
+- 📋 客户端列表一目了然，挑设备加规则像点外卖一样简单
 
-## 兼容性
+---
 
-- OpenWrt / KWRT / ImmortalWrt 等任何带 `luci-app-passwall` 或 `luci-app-passwall2` 的固件
-- 自动选 primary 配置（v1 优先），所有路径在登录后实时探测
+## 💻 PC 版（Windows）—— 全功能管理台
+
+PC 端定位是"周末坐下来认真折腾"，所以功能更全：
+
+- 📡 节点订阅管理（增删订阅、立即拉取、改备注）
+- 🏓 节点测试：ICMP ping / TCPing / URL 测速，一键看哪条线路最快
+- 📜 直连列表（域名 / IP / CIDR）增删
+- 🩺 系统信息与 PassWall 安装态实时探测
+- 🗂️ 节点列表浏览（按订阅、按协议筛选）
+- 🛡️ 自签 HTTPS 由你主动放行；写入字段全部白名单校验
+
+---
+
+## 📱 Android 版 —— 沙发/通勤速控端
+
+定位是"躺着也能改规则"，只保留最常用的：
+
+- 👥 客户端列表
+- 🎚️ ACL 规则编辑与开关
+- ⏱️ 临时切换图标（一键禁用某条规则，待会儿再点一下恢复）
+
+> Android 版有意做得"轻"，复杂操作交给 PC 版 ✋
+
+---
+
+## 🆚 凭什么不用 LuCI / SSH
+
+| 场景 | 🐌 LuCI | 🤖 SSH | ⚡ KWRT Controller |
+|---|---|---|---|
+| 打开"访问控制"页 | 1–3 秒 | 要记 uci 命令 | 0.5 秒 |
+| 改一条规则 + 应用 | **30–60 秒**，页面卡住 | 几行 uci + reload | 即点即提交，reload 后台跑 |
+| 手机操作 | 😭 | 😱 | 😎 原生体验 |
+| 家人 / 室友也想用 | 难 | 不可能 | 给他装一个 APK 即可 |
+
+---
+
+## 🌍 适配范围
+
+- ✅ OpenWrt / KWRT / ImmortalWrt 任何带 `luci-app-passwall` 或 `luci-app-passwall2` 的固件
+- ✅ v1 / v2 自动识别，登录后实时探测路径，**不写死任何路由器细节**
+
+---
+
+
+
+## 📦 下载
+
+去 [Releases](../../releases) 拿就完事了 👇
+
+| 平台 | 文件 | 说明 |
+|---|---|---|
+| 🪟 Windows | `kwrt-controller-windows-x64.exe` | 单文件，双击运行，免安装 |
+| 🤖 Android | `kwrt-controller-android-arm64-v8a.apk` | 64 位 ARM 手机（覆盖几乎所有现役机型） |
+
+打 tag 自动出包，详见 [.github/workflows/release.yml](.github/workflows/release.yml)。
+
+---
+
+## 💌 小贴士
+
+- 主路由给关心的设备**绑死 MAC → IP**，然后在本应用里按 IP 写规则，最丝滑 🍦
+- ACL 总开关像家里的总闸 —— **平时常开，只有偶尔全屋直连时关一下** 👌
+- 弱路由器（mt7621 之类）请把 sing-box / xray 这种大二进制放到 **U 盘 ext4 分区**，省 overlay 空间 💾

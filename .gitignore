@@ -33,3 +33,8 @@ Thumbs.db
 
 # Node
 node_modules/
+
+# 仅保留根目录 README.md，其它 md 全部忽略（草稿/调研/手册/子目录 README 都不入库）
+*.md
+!/README.md
+
