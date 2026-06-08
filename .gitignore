@@ -1,3 +1,40 @@
 release/
 *.log
 src-tauri/build.log
+
+# Tauri / Cargo
+src-tauri/target/
+
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/.idea/
+android/.cxx/
+# wrapper 是脚本生成的，不入库（首次跑 scripts/build-android.ps1 会重建）
+android/gradle/
+android/gradlew
+android/gradlew.bat
+
+# 本地一次性下载的 Gradle 发行版（脚本会自动重下）
+.gradle-dist/
+
+# APK 产物目录
+dist-android/
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# 仅保留根目录 README.md，其它 md 全部忽略（草稿/调研/手册/子目录 README 都不入库）
+*.md
+!/README.md
+

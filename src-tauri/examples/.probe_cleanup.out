@@ -1,0 +1,8 @@
+   Compiling kwrt-controller v0.1.0 (C:\Scripts\projects\KWRTAndroid\src-tauri)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 17.00s
+     Running `target\debug\examples\probe_cleanup.exe`
+Error: shell 鍛戒护澶辫触 exit=1: deleting cfg1c30ec
+deleting cfg1d30ec
+=== remaining acl_rule ===
+
+error: process didn't exit successfully: `target\debug\examples\probe_cleanup.exe` (exit code: 1)

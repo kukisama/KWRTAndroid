@@ -1,0 +1,136 @@
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.49s
+     Running `target\debug\examples\probe_acl.exe`
+
+========== acl_rule_sections ==========
+
+[exit=0]
+
+========== global_other_lan ==========
+[exit=0]
+passwall.cfg013fd6=global
+passwall.cfg013fd6.enabled='1'
+passwall.cfg013fd6.socks_enabled='0'
+
+passwall.cfg013fd6.tcp_node_socks_port='1070'
+========== nodes_brief ==========
+passwall.cfg013fd6.filter_proxy_ipv6='1'
+passwall.cfg013fd6.dns_shunt='chinadns-ng'
+passwall.cfg013fd6.dns_mode='tcp'
+passwall.cfg013fd6.remote_dns='1.1.1.1'
+passwall.cfg013fd6.smartdns_remote_dns='https://1.1.1.1/dns-query'
+passwall.cfg013fd6.dns_redirect='1'
+passwall.cfg013fd6.chn_list='proxy'
+passwall.cfg013fd6.tcp_proxy_mode='proxy'
+passwall.cfg013fd6.udp_proxy_mode='proxy'
+passwall.cfg013fd6.localhost_proxy='1'
+passwall.cfg013fd6.client_proxy='1'
+passwall.cfg013fd6.acl_enable='0'
+passwall.cfg013fd6.log_tcp='0'
+passwall.cfg013fd6.log_udp='0'
+passwall.cfg013fd6.loglevel='error'
+passwall.cfg013fd6.trojan_loglevel='4'
+passwall.cfg013fd6.log_chinadns_ng='0'
+passwall.cfg013fd6.tcp_node='EynAuJkC'
+passwall.cfg013fd6.udp_node='EynAuJkC'
+passwall.cfg013fd6.force_https_soa='1'
+passwall.cfg013fd6.adblock='0'
+passwall.cfg013fd6.timestamp='1780395395'
+passwall.cfg013fd6.dnsmasq_dns_redirect='1'
+---
+passwall.cfg02ec80=global_haproxy
+passwall.cfg02ec80.balancing_enable='0'
+---
+passwall.cfg09fe56=global_app
+passwall.cfg09fe56.singbox_file='/usr/bin/sing-box'
+passwall.cfg09fe56.xray_file='/usr/bin/xray'
+passwall.cfg09fe56.hysteria_file='/usr/bin/hysteria'
+passwall.cfg09fe56.chinadns_ng='/usr/bin/chinadns-ng'
+passwall.SdHpttZK
+passwall.Pen9ygcU
+passwall.SwRqHl3v
+passwall.EynAuJkC
+passwall.0EH2x8AO
+passwall.394aKMZy
+passwall.Koop7Rhj
+passwall.VQkOocEK
+passwall.8SHyfygM
+passwall.sTCOnofX
+[exit=0]
+
+========== lan_devices ==========
+[exit=0]
+
+========== cpu_stat_sources ==========
+1780443128 a0:d3:65:fa:bc:0c 10.0.0.114 panggedadan 01:a0:d3:65:fa:bc:0c
+1780438504 e2:04:75:84:e3:8f 10.0.0.189 iPhone 01:e2:04:75:84:e3:8f
+1780436180 ba:d5:92:e6:03:00 10.0.0.220 Watch 01:ba:d5:92:e6:03:00
+---
+192.168.1.111 dev phy1-sta0 lladdr 68:c4:4c:04:41:da STALE 
+10.0.0.220 dev br-lan lladdr ba:d5:92:e6:03:00 STALE 
+192.168.1.108 dev phy1-sta0 lladdr 58:41:20:3f:1c:0b STALE 
+10.0.0.189 dev br-lan lladdr e2:04:75:84:e3:8f STALE 
+192.168.1.1 dev phy1-sta0 lladdr 68:77:24:45:5d:2d DELAY 
+10.0.0.114 dev br-lan lladdr a0:d3:65:fa:bc:0c REACHABLE 
+fe80::ecb8:20ff:feb6:442 dev phy1-sta0 lladdr ee:b8:20:b6:04:42 STALE 
+fe80::14a3:5a40:fede:953 dev br-lan lladdr e2:04:75:84:e3:8f STALE 
+fe80::1055:f63f:6577:5d79 dev br-lan lladdr ba:d5:92:e6:03:00 STALE 
+fe80::2a:4019:80d2:eee dev phy1-sta0 lladdr a6:3a:15:08:87:50 STALE 
+fe80::40e:81bd:1888:8a9d dev phy1-sta0 lladdr 28:02:44:14:c4:73 STALE 
+fe80::d979:a06c:d998:c804 dev phy1-sta0 lladdr 68:c4:4c:04:41:da STALE 
+cpu  333366 0 255459 28706143 448 0 19045 0 0 0
+cpu0 80207 0 37944 7218193 120 0 4106 0 0 0
+---
+0.08 0.17 0.12 1/174 4147
+---
+ 19:53:58 up 20:29,  load average: 0.08, 0.17, 0.11
+---
+Mem: 160616K used, 87144K free, 1544K shrd, 0K buff, 69652K cached
+CPU:   0% usr   4% sys   0% nic  95% idle   0% io   0% irq   0% sirq
+Load average: 0.08 0.17 0.12 2/175 4150
+  PID  PPID USER     STAT   VSZ %VSZ %CPU COMMAND
+ 4149  4145 root     R     1448   1%   4% top -bn1
+ 2565     1 root     S     587m 242%   0% /tmp/etc/passwall/bin/xray run -c /tmp/etc/passwall/acl/default/TCP_UDP_SOCKS.json
+ 3431  3393 root     S     9560   4%   0% nginx: worker process
+ 3435  3393 root     S     9492   4%   0% nginx: worker process
+ 3436  3393 root     S     9492   4%   0% nginx: worker process
+ 3430  3393 root     S     9492   4%   0% nginx: worker process
+[exit=0]
+
+========== storage_facts ==========
+Filesystem                Size      Used Available Use% Mounted on
+[exit=0]
+/dev/root                23.8M     23.8M         0 100% /rom
+
+tmpfs                   121.0M    896.0K    120.1M   1% /tmp
+========== luci_acl_model_lua ==========
+/dev/ubi0_1               9.4M    364.0K      8.5M   4% /overlay
+overlayfs:/overlay        9.4M    364.0K      8.5M   4% /
+tmpfs                   512.0K         0    512.0K   0% /dev
+---
+/dev/root on /rom type squashfs (ro,relatime,errors=continue)
+proc on /proc type proc (rw,nosuid,nodev,noexec,relatime)
+sysfs on /sys type sysfs (rw,nosuid,nodev,noexec,relatime)
+cgroup2 on /sys/fs/cgroup type cgroup2 (rw,nosuid,nodev,noexec,relatime,nsdelegate)
+tmpfs on /tmp type tmpfs (rw,nosuid,nodev,noatime)
+/dev/ubi0_1 on /overlay type ubifs (rw,noatime,assert=read-only,ubi=0,vol=1)
+overlayfs:/overlay on / type overlay (rw,noatime,lowerdir=/,upperdir=/overlay/upper,workdir=/overlay/work)
+tmpfs on /dev type tmpfs (rw,nosuid,noexec,noatime,size=512k,mode=755)
+devpts on /dev/pts type devpts (rw,nosuid,noexec,noatime,mode=600,ptmxmode=000)
+debugfs on /sys/kernel/debug type debugfs (rw,nosuid,nodev,noexec,noatime)
+bpffs on /sys/fs/bpf type bpf (rw,nosuid,nodev,noexec,noatime,mode=700)
+---
+drwxr-xr-x   16 root     root           235 Dec 28 09:23 .
+drwxr-xr-x    1 root     root           480 May 22 22:54 ..
+drwxr-xr-x    2 root     root           845 Apr 22 19:54 bin
+drwxr-xr-x    2 root     root            30 Apr 22 19:54 dev
+drwxr-xr-x   27 root     root          1139 Apr 22 19:54 etc
+drwxr-xr-x   11 root     root           611 Apr 22 19:54 lib
+drwxr-xr-x    2 root     root             3 Apr 22 19:54 mnt
+drwxr-xr-x    2 root     root             3 Apr 22 19:54 overlay
+drwxr-xr-x    2 root     root             3 Apr 22 19:54 proc
+drwxr-xr-x    2 root     root            27 Apr 22 19:54 rom
+---END---
+[exit=0]
+
+========== luci_acl_interface_lua ==========
+[err] shell 鍛戒护澶辫触 exit=1: 

@@ -101,21 +101,67 @@ pub async fn run_detection(client: &LuciClient) -> Result<DetectionReport> {
     }
 
     // 2) 列出 UCI 配置；用来判断有没有 passwall / passwall2
-    let configs = client.uci_configs().await.unwrap_or_default();
+    //    注意：很多 LuCI 用户 ACL 不允许 `uci configs`，但允许 `uci get <name>`，
+    //    所以这里两条腿走路：先试枚举，再对候选名逐个 `uci get` 兜底。
+    let (configs, configs_err) = match client.uci_configs().await {
+        Ok(v) => (v, None),
+        Err(e) => (vec![], Some(e.to_string())),
+    };
     report.uci_configs = configs.clone();
-    let has_v1 = configs.iter().any(|c| c == "passwall");
-    let has_v2 = configs.iter().any(|c| c == "passwall2");
+
+    let candidates = ["passwall", "passwall2"];
+    let mut probe_results: Vec<(String, bool, String)> = vec![];
+    let mut has_v1 = configs.iter().any(|c| c == "passwall");
+    let mut has_v2 = configs.iter().any(|c| c == "passwall2");
+
+    for name in candidates {
+        // 跳过已经通过枚举确认的
+        let already = (name == "passwall" && has_v1) || (name == "passwall2" && has_v2);
+        if already {
+            probe_results.push((name.into(), true, "uci.configs 已枚举到".into()));
+            continue;
+        }
+        match client.uci_get(name, None, None).await {
+            Ok(v) => {
+                let n = v
+                    .get("values")
+                    .and_then(|x| x.as_object())
+                    .map(|m| m.len())
+                    .unwrap_or(0);
+                if name == "passwall" { has_v1 = true; }
+                if name == "passwall2" { has_v2 = true; }
+                if !report.uci_configs.iter().any(|c| c == name) {
+                    report.uci_configs.push(name.to_string());
+                }
+                probe_results.push((name.into(), true, format!("uci get {name} 成功，{n} 个 section")));
+            }
+            Err(e) => {
+                probe_results.push((name.into(), false, format!("uci get {name} 失败：{e}")));
+            }
+        }
+    }
+
     report.variant = match (has_v1, has_v2) {
         (true, true) => PassWallVariant::Both,
         (true, false) => PassWallVariant::V1,
         (false, true) => PassWallVariant::V2,
         _ => PassWallVariant::None,
     };
-    report.add(
-        "uci.configs",
-        true,
-        format!("共 {} 份配置；passwall={}, passwall2={}", configs.len(), has_v1, has_v2),
-    );
+    let configs_summary = if let Some(err) = &configs_err {
+        format!(
+            "uci.configs 调用失败（{err}）；改用直接 uci get 探测：passwall={}, passwall2={}",
+            has_v1, has_v2
+        )
+    } else {
+        format!(
+            "uci.configs 枚举 {} 份；直接探测：passwall={}, passwall2={}",
+            configs.len(), has_v1, has_v2
+        )
+    };
+    report.add("uci.configs", configs_err.is_none(), configs_summary);
+    for (name, ok, detail) in probe_results {
+        report.add(&format!("uci.get({name})"), ok, detail);
+    }
 
     // 3) 选 primary：优先 v1（你截图就是 v1 风格），其次 v2
     let primary = if has_v1 {
@@ -136,13 +182,17 @@ pub async fn run_detection(client: &LuciClient) -> Result<DetectionReport> {
                     .and_then(|x| x.as_object())
                     .map(|m| m.len())
                     .unwrap_or(0);
+                // 把整份 UCI 配置 dump 出来，方便规划下一步功能
+                log::info!("===== FULL UCI DUMP: {cfg} (sections={n_sections}) =====");
+                log::info!("{}", serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string()));
+                log::info!("===== END UCI DUMP: {cfg} =====");
                 report.add(
-                    "uci.get",
+                    "uci.get(primary)",
                     true,
                     format!("可读 {cfg}，共 {n_sections} 个 section"),
                 );
             }
-            Err(e) => report.add("uci.get", false, format!("读 {cfg} 失败：{e}")),
+            Err(e) => report.add("uci.get(primary)", false, format!("读 {cfg} 失败：{e}")),
         }
     } else {
         report.add(

@@ -1,5 +1,6 @@
-//! LuCI / ubus 客户端：表单登录拿 sysauth Cookie，并通过 /ubus 调用 RPC。
+//! LuCI / ubus 客户端：仅走 ubus 登录，拿到 session 后直接作为 sysauth cookie 注入。
 use anyhow::{anyhow, Context, Result};
+use reqwest::cookie::Jar;
 use reqwest::header::{HeaderMap, HeaderValue, COOKIE};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -56,12 +57,19 @@ impl LuciClient {
 
     pub async fn connect(opts: ConnectOptions) -> Result<Self> {
         let base = Self::build_base(&opts)?;
-        let timeout = Duration::from_secs(opts.timeout_secs.unwrap_or(10));
+        // 路由器侧 init.d reload / 长 shell 命令可能跑十几秒；给宽松超时。
+        let timeout = Duration::from_secs(opts.timeout_secs.unwrap_or(60));
+
+        // 自带一个可外部访问的 cookie jar，在 ubus 登录成功后手动注入 sysauth_http。
+        // （LuCI 控制器端点如 ping_node / urltest_node 依赖 sysauth cookie 鉴权。）
+        let jar: Arc<Jar> = Arc::new(Jar::default());
 
         let mut builder = Client::builder()
-            .cookie_store(true)
+            .cookie_provider(jar.clone())
             .timeout(timeout)
             .connect_timeout(Duration::from_secs(5))
+            // 路由器一般在 LAN，禁用系统代理，避免被本机 HTTP 代理拦截后超时/失败。
+            .no_proxy()
             .user_agent("KWRT-Controller/0.1");
         if opts.accept_invalid_certs {
             builder = builder.danger_accept_invalid_certs(true);
@@ -69,57 +77,24 @@ impl LuciClient {
         let http = builder.build().context("构建 HTTP 客户端失败")?;
 
         let mut client = LuciClient {
-            base_url: base,
+            base_url: base.clone(),
             http,
             sysauth: None,
             ubus_session: None,
             username: opts.username.clone(),
         };
 
-        // 1) 表单登录拿 sysauth（用于 /cgi-bin/luci 的所有访问）
-        client.login_form(&opts.username, &opts.password).await?;
-        // 2) ubus 会话登录（用于程序化调用）
+        // 只走 ubus 登录（最稳、最快；不依赖 LuCI 主题/表单字段）
         client.login_ubus(&opts.username, &opts.password).await?;
-        Ok(client)
-    }
 
-    async fn login_form(&mut self, user: &str, pass: &str) -> Result<()> {
-        let url = self.base_url.join("cgi-bin/luci/")?;
-        // LuCI 默认登录表单字段：luci_username / luci_password
-        let form = [("luci_username", user), ("luci_password", pass)];
-        let resp = self
-            .http
-            .post(url.clone())
-            .form(&form)
-            .send()
-            .await
-            .with_context(|| format!("无法访问 {url}（路由器是否可达？端口是否正确？）"))?;
-        // 成功标志：响应头里能拿到 sysauth*=… Cookie，或重定向到 /admin
-        let mut found: Option<String> = None;
-        for cookie in resp.cookies() {
-            let name = cookie.name();
-            if name.starts_with("sysauth") {
-                found = Some(format!("{}={}", name, cookie.value()));
-                break;
-            }
+        // ubus 拿到的 session token 在 LuCI 看来就是 sysauth_http 的值，
+        // 直接注入 cookie jar，后续 http_ping / urltest_node 都能使用。
+        if let Some(sess) = &client.ubus_session {
+            let cookie = format!("sysauth_http={sess}; Path=/");
+            jar.add_cookie_str(&cookie, &base);
+            client.sysauth = Some(format!("sysauth_http={sess}"));
         }
-        if found.is_none() {
-            // 个别主题会在 302 之后才下发；reqwest 默认会跟随重定向，cookie 仍会写入 store。
-            // 这里再用 cookie_store 查一次。
-            // reqwest 0.12 没有公开 cookie_store；通过对根路径再发一次请求来探测。
-            let probe = self.http.get(self.base_url.clone()).send().await?;
-            for cookie in probe.cookies() {
-                let name = cookie.name();
-                if name.starts_with("sysauth") {
-                    found = Some(format!("{}={}", name, cookie.value()));
-                    break;
-                }
-            }
-        }
-        let cookie =
-            found.ok_or_else(|| anyhow!("表单登录失败：未拿到 sysauth Cookie（密码是否正确？）"))?;
-        self.sysauth = Some(cookie);
-        Ok(())
+        Ok(client)
     }
 
     async fn login_ubus(&mut self, user: &str, pass: &str) -> Result<()> {
@@ -260,6 +235,90 @@ impl LuciClient {
     pub async fn rc_init(&self, name: &str, action: &str) -> Result<Value> {
         self.ubus_call("rc", "init", json!({ "name": name, "action": action }))
             .await
+    }
+
+    /// uci set：写入若干 option（不会自动 commit）。
+    pub async fn uci_set(
+        &self,
+        config: &str,
+        section: &str,
+        values: Value,
+    ) -> Result<Value> {
+        self.ubus_call(
+            "uci",
+            "set",
+            json!({ "config": config, "section": section, "values": values }),
+        )
+        .await
+    }
+
+    /// uci add：新增匿名 section，可附带 values。返回 result 里通常带 `section` = 新名。
+    pub async fn uci_add(
+        &self,
+        config: &str,
+        section_type: &str,
+        name: Option<&str>,
+        values: Value,
+    ) -> Result<Value> {
+        let mut p = serde_json::Map::new();
+        p.insert("config".into(), json!(config));
+        p.insert("type".into(), json!(section_type));
+        if let Some(n) = name {
+            p.insert("name".into(), json!(n));
+        }
+        p.insert("values".into(), values);
+        self.ubus_call("uci", "add", Value::Object(p)).await
+    }
+
+    /// uci delete section 或 option。
+    pub async fn uci_delete(
+        &self,
+        config: &str,
+        section: &str,
+        option: Option<&str>,
+    ) -> Result<Value> {
+        let mut p = serde_json::Map::new();
+        p.insert("config".into(), json!(config));
+        p.insert("section".into(), json!(section));
+        if let Some(o) = option {
+            p.insert("option".into(), json!(o));
+        }
+        self.ubus_call("uci", "delete", Value::Object(p)).await
+    }
+
+    /// uci commit：写盘。
+    pub async fn uci_commit(&self, config: &str) -> Result<Value> {
+        self.ubus_call("uci", "commit", json!({ "config": config }))
+            .await
+    }
+
+    /// 通过 file.exec 调用 shell 命令；某些固件可能禁用，调用方需容错。
+    pub async fn file_exec(&self, command: &str, params: Vec<&str>) -> Result<Value> {
+        self.ubus_call(
+            "file",
+            "exec",
+            json!({ "command": command, "params": params }),
+        )
+        .await
+    }
+
+    /// 把一段 shell 脚本交给路由器执行，等价于 `sh -c "<script>"`。
+    /// 返回 (code, stdout, stderr)；code != 0 时返回 Err，stderr 拼到 message 里。
+    pub async fn shell(&self, script: &str) -> Result<(i64, String, String)> {
+        let v = self
+            .file_exec("sh", vec!["-c", script])
+            .await
+            .context("file.exec sh -c 失败（rpcd 可能禁用了 file.exec）")?;
+        let code = v.get("code").and_then(|x| x.as_i64()).unwrap_or(-1);
+        let stdout = v.get("stdout").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let stderr = v.get("stderr").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        if code != 0 {
+            return Err(anyhow!(
+                "shell 命令失败 exit={code}: {}",
+                if stderr.is_empty() { stdout.clone() } else { stderr.clone() }
+            ));
+        }
+        Ok((code, stdout, stderr))
     }
 
     pub async fn system_board(&self) -> Result<Value> {

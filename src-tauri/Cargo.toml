@@ -21,6 +21,7 @@ keyring = { version = "3", features = ["windows-native"] }
 anyhow = "1"
 thiserror = "2"
 url = "2"
+base64 = "0.22"
 log = "0.4"
 env_logger = "0.11"
 

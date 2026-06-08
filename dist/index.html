@@ -4,100 +4,123 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>KWRT Controller</title>
-    <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./style.v4.css" />
+    <script>
+      // 早期同步应用主题，避免 FOUC
+      (function () {
+        try {
+          var t = localStorage.getItem("kwrt.theme");
+          if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+        } catch (e) {}
+      })();
+      // 可视化诊断面板：默认隐藏，点右上角 🐞 按钮显示。
+      // 自动镜像 console.log/warn/error + window.error + unhandledrejection。
+      window.__dbgBuf = [];
+      window.__dbg = function (msg) {
+        try {
+          var line = new Date().toISOString().slice(11, 19) + "  " + msg;
+          window.__dbgBuf.push(line);
+          if (window.__dbgBuf.length > 500) window.__dbgBuf.shift();
+          var p = document.getElementById("dbg-pane");
+          if (p) {
+            p.textContent = window.__dbgBuf.join("\n");
+            p.scrollTop = p.scrollHeight;
+          }
+        } catch (e) {}
+      };
+      // 镜像 console.* 到诊断面板
+      ["log", "warn", "error", "info"].forEach(function (k) {
+        var orig = console[k].bind(console);
+        console[k] = function () {
+          try {
+            var parts = [];
+            for (var i = 0; i < arguments.length; i++) {
+              var a = arguments[i];
+              if (a instanceof Error) parts.push(a.stack || a.message);
+              else if (typeof a === "object") { try { parts.push(JSON.stringify(a)); } catch (_) { parts.push(String(a)); } }
+              else parts.push(String(a));
+            }
+            window.__dbg("[" + k + "] " + parts.join(" "));
+          } catch (_) {}
+          orig.apply(null, arguments);
+        };
+      });
+      window.addEventListener("error", function (e) {
+        try { window.__dbg("window.error: " + (e.message || e) + (e.filename ? " @ " + e.filename + ":" + e.lineno : "")); } catch (_) {}
+      });
+      window.addEventListener("unhandledrejection", function (e) {
+        try { window.__dbg("unhandledrejection: " + (e.reason && (e.reason.message || e.reason)) ); } catch (_) {}
+      });
+    </script>
   </head>
   <body>
     <header class="topbar">
       <div class="brand">KWRT Controller</div>
-      <div class="status" id="status-line">未连接</div>
-      <button id="btn-disconnect" class="ghost" hidden>退出登录</button>
+      <div class="status" id="status-line" hidden>未连接</div>
+      <span class="grow"></span>
+      <!-- 已登录后才展示的操作按钮区：所有动作都收纳到顶栏一排 -->
+      <div id="topbar-actions" class="topbar-actions" hidden>
+        <button id="btn-redetect" class="ghost icon-btn" data-tip="重新跑一次 ubus / uci 探测">重新检测</button>
+        <button id="btn-refresh-all" class="ghost icon-btn" data-tip="拉取最新的 PassWall 配置并刷新所有面板">刷新</button>
+        <span id="dirty-indicator" class="dirty-indicator" hidden data-tip="鼠标悬停查看未应用的具体变更">●&nbsp;未应用</span>
+        <button id="btn-save" class="ghost icon-btn" data-tip="uci commit：把暂存写入持久化（不重启服务）">保存</button>
+        <button id="btn-save-apply" class="primary icon-btn" data-tip="uci commit + reload：让最新配置真正生效">保存并应用</button>
+        <button id="btn-revert" class="ghost icon-btn" data-tip="uci revert：丢弃尚未 commit 的暂存">复位</button>
+        <button id="btn-restart" class="danger ghost icon-btn" data-tip="restart init 脚本：彻底重启 PassWall，会短暂中断代理">重启 PassWall</button>
+      </div>
+      <button id="btn-theme" class="icon-btn" data-tip="切换主题">🌗</button>
+      <button id="btn-debug" class="icon-btn" data-tip="显示 / 隐藏 调试面板" onclick="(function(){var p=document.getElementById('dbg-pane');if(!p)return;p.hidden=!p.hidden;if(!p.hidden){p.textContent=(window.__dbgBuf||[]).join('\n');p.scrollTop=p.scrollHeight;}})()">🐞</button>
+      <button id="btn-disconnect" class="icon-btn icon-btn-square" hidden data-tip="退出登录：断开当前连接并回到登录页">➜</button>
     </header>
 
-    <main id="view-login" class="view">
-      <h2>登录路由器</h2>
-      <p class="hint">
-        在 <code>路由器 IP</code> 一栏填 LAN 地址（例如 <code>10.0.0.1</code>）。
-        密码可勾选"记住密码"保存到 Windows 凭据管理器；不会写入任何明文文件。
-      </p>
-      <form id="form-login">
-        <div class="row">
-          <label>协议
-            <select name="scheme">
-              <option value="http" selected>http</option>
-              <option value="https">https</option>
-            </select>
+    <!-- dirty 悬浮浮层：鼠标移到“未应用”徽标时显示具体 uci changes 行 -->
+    <div id="dirty-popover" class="dirty-popover" hidden></div>
+
+    <!-- 诊断面板：默认隐藏；点右上角 🐞 按钮切换显示 -->
+    <pre id="dbg-pane" hidden style="position:fixed;left:8px;bottom:8px;max-width:48vw;max-height:36vh;overflow:auto;background:rgba(0,0,0,0.82);color:#9fffa0;font-family:ui-monospace,Consolas,monospace;font-size:11px;padding:8px 10px;border-radius:6px;z-index:9998;white-space:pre-wrap;border:1px solid #3a3;"></pre>
+
+    <script>window.__dbg && window.__dbg("html parsed");</script>
+
+    <!-- 登录视图 -->
+    <main id="view-login" class="view view-login">
+      <div class="login-card">
+        <h2>登录路由器</h2>
+        <form id="form-login" autocomplete="off">
+          <label class="stack" data-tip="例：http://10.0.0.1；https 也可。需要非默认端口则附加 :8080">路由器地址
+            <input name="url" required placeholder="http://10.0.0.1　或　https://10.0.0.1:8443" autocomplete="off" />
           </label>
-          <label class="grow">路由器 IP / 域名
-            <input name="host" required placeholder="10.0.0.1" autocomplete="off" />
-          </label>
-          <label>端口（可选）
-            <input name="port" type="number" min="1" max="65535" placeholder="80 / 443" />
-          </label>
-        </div>
-        <div class="row">
-          <label class="grow">用户名
+          <label class="stack" data-tip="登录 LuCI 的用户名，OpenWrt 默认是 root">用户名
             <input name="username" required value="root" autocomplete="off" />
           </label>
-          <label class="grow">密码
+          <label class="stack" data-tip="登录 LuCI 的密码；勾选记住密码后会保存到 Windows 凭据管理器">密码
             <input name="password" type="password" required autocomplete="off" />
           </label>
-        </div>
-        <div class="row checks">
-          <label><input type="checkbox" name="remember" /> 记住密码（写入 Windows 凭据管理器）</label>
-          <label title="仅在你信任该路由器且用了自签 HTTPS 时勾选">
-            <input type="checkbox" name="accept_invalid_certs" /> 允许自签 / 不受信任的 HTTPS 证书
+          <label class="inline" data-tip="勾选后密码加密存入 Windows 凭据管理器；下次启动会自动登录">
+            <input type="checkbox" name="remember" checked /> 记住密码（下次自动登录）
           </label>
-        </div>
-        <div class="row actions">
-          <button type="submit" id="btn-login" class="primary">登录并检测</button>
-          <button type="button" id="btn-forget" class="danger ghost">忘记此账号的保存密码</button>
-        </div>
-      </form>
-      <div id="login-error" class="error" hidden></div>
-    </main>
-
-    <main id="view-main" class="view" hidden>
-      <section class="card">
-        <h3>诊断报告</h3>
-        <div id="banner" class="banner"></div>
-        <ul id="checks" class="checks-list"></ul>
-        <details>
-          <summary>已识别的全部 UCI 配置</summary>
-          <div id="configs" class="mono small"></div>
-        </details>
-        <div class="row actions">
-          <button id="btn-redetect" class="ghost">重新运行检测</button>
-        </div>
-      </section>
-
-      <section class="card" id="actions-card">
-        <h3>快捷动作 — 直连列表</h3>
-        <div id="actions-disabled" class="error" hidden>
-          未识别到 PassWall（passwall / passwall2），或未找到直连列表文件。请确认路由器固件已安装 luci-app-passwall。
-        </div>
-        <div id="actions-enabled" hidden>
-          <p class="hint">
-            当前直连列表文件：<code id="direct-path"></code>
-            （任何加入这里的 IP / 域名将<strong>不走代理</strong>，直连出局）
-          </p>
-          <form id="form-add">
-            <input name="entry" required placeholder="例如 1.2.3.4 或 1.2.3.0/24 或 example.com" />
-            <button type="submit" class="primary">加入直连</button>
-          </form>
-          <div id="add-msg" class="msg" hidden></div>
-
           <div class="row actions">
-            <button id="btn-reload" class="ghost">reload PassWall</button>
-            <button id="btn-restart" class="danger ghost">restart PassWall</button>
-            <button id="btn-refresh-list" class="ghost">刷新列表</button>
+            <button type="submit" id="btn-login" class="primary" data-tip="登录并对路由器做一次 PassWall 诊断">登录并检测</button>
+            <button type="button" id="btn-forget" class="danger ghost" data-tip="从 Windows 凭据管理器中删除该 用户@主机 的保存密码">忘记保存密码</button>
           </div>
-
-          <h4>当前直连规则（<span id="entry-count">0</span> 条）</h4>
-          <ul id="direct-list" class="entries"></ul>
-        </div>
-      </section>
+        </form>
+        <div id="login-error" class="error" hidden></div>
+      </div>
     </main>
 
-    <script src="./app.js"></script>
+    <!-- 主视图 -->
+    <main id="view-main" class="view" hidden>
+      <!-- 仅在“未识别 PassWall”等异常时显示的浮动错误条；正常时隐藏，不占空间 -->
+      <div id="banner" class="banner banner-compact" hidden></div>
+
+      <!-- Tab 导航 -->
+      <nav id="tabbar" class="tabbar"></nav>
+      <!-- Tab 内容容器 -->
+      <section id="tabview"></section>
+    </main>
+
+    <!-- 浮动 tooltip -->
+    <div id="tip" class="tip" hidden></div>
+
+    <script type="module" src="./app.v4.js"></script>
   </body>
 </html>
